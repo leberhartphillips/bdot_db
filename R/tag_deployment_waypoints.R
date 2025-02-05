@@ -42,8 +42,6 @@ bdot_tag_deploymenets_2024 <-
   mutate(local_deployment_time = as.POSIXct(with_tz(ymd_hms(paste(date, time, sep = " "), tz = 'Pacific/Auckland'), 'Pacific/Auckland'))) %>% 
   select(site, local_deployment_time, field_sex, ring, mark, tag_id, tag_type, lat, lon)
 
-write.csv(bdot_tag_deploymenets_2024, "data/bdot_tag_deployments_2024.csv", row.names = FALSE)
-
 # Remove rows with missing latitude or longitude
 bdot_tag_deploymenets_2024 <- 
   na.omit(bdot_tag_deploymenets_2024[, c("lon", "lat")])

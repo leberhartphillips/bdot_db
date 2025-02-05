@@ -1,0 +1,458 @@
+---
+title: "Banded Dotterel Database Management"
+date: "`r format(Sys.time(), '%H:%M %d %B, %Y')`"
+author: 
+ - name: Luke Eberhart-Hertel
+   orcid: 0000-0001-7311-6088
+   email: luke.eberhart@bi.mpg.de
+   url: https://www.bi.mpg.de/person/115852/2867
+   affiliations:
+     - ref: bk
+ - name: Mihai Valcu
+   affiliations:
+     - ref: bk
+affiliations:
+ - id: bk
+   number: 1
+   name: Department of Ornithology, Max Planck Institute for Biological Intelligence, Seewiesen, Germany
+format: 
+  html:
+    toc: true
+    code-fold: false
+    code-tools: true
+    self-contained: true
+    highlight-style: github
+    theme: Cosmo
+execute:
+  warning: false
+  cache: true
+editor_options: 
+  chunk_output_type: console
+---
+```{r, include=FALSE}
+knitr::opts_chunk$set(cache = FALSE)
+options(repos = c(CRAN = "https://cran.rstudio.com"))
+```
+
+## Prerequisites
+### R packages
+install Mihai's dbo and apis packages from the mpio-be GitHub repository
+```{r, eval=FALSE}
+remotes::install_github("mpio-be/dbo")
+remotes::install_github("mpio-be/apis")
+```
+
+The following packages are needed for the code in this document to run and can be easily installed from [CRAN](http://cran.r-project.org/) by running the following code chunk:
+```{r, message=FALSE, results='hide', warning=FALSE, cache=FALSE}
+# Set a CRAN mirror before installing packages
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+# a vector of all the packages needed in the project
+packages_required_in_project <-
+  c("dbo", "DBI", "tidyverse", "hms", "sf", 
+    "xml2", "DT", "openxlsx", "here", "googlesheets4", 
+    "ggmap")
+
+# of the required packages, check if some need to be installed
+new.packages <- 
+  packages_required_in_project[!(packages_required_in_project %in% 
+                                   installed.packages()[,"Package"])]
+
+# install all packages that are not locally available
+if(length(new.packages)) install.packages(new.packages)
+
+# load all the packages into the current R session
+lapply(packages_required_in_project, require, character.only = TRUE)
+```
+
+set the home directory to where the project is locally based (i.e., to find the relevant datasets to import, etc.)
+```{r, message=FALSE, results='hide', warning=FALSE, cache=FALSE}
+here::set_here()
+```
+
+```{r, eval=FALSE, include=FALSE}
+    # "apis", "BaSTA", "brms", "broom.mixed", "colorspace", "corrplot", "data.table", 
+    # "DBI", "dbo", "effects", "elevatr", "geosphere", "ggblend", "ggeffects", "ggmap",
+    # "ggnewscale", "ggsn", "giscoR", "glue", "googlesheets4", "gt", "gtsummary", 
+    # "here", "hms", "lme4", "lubridate", "mapview", "mgcv", "multcomp", "MuMIn", "nnet", 
+    # "partR2", "patchwork", "RColorBrewer", "readxl", "remotes", "RMark", "rnaturalearth", 
+    # "rptR", "scales", "sf", "showtext", "smatr", "sp", "stringr", "tidybayes", 
+    # "tidyterra", "tidyverse", "adehabitatLT"
+```
+
+### Set up database access 
+In this case we want to set up our access to the FIELD_2024_BADOatNZ database hosted on scidb.mpio.orn.mpg.de.
+
+First run the `my.cnf()` to access your credentials
+```{r, eval=FALSE}
+my.cnf()
+```
+
+For example, your `my.cnf()` file could contain the following information in which you would need to enter your username ('user') and password:
+
+`[scidb_replica]`
+`host=134.76.24.182`
+`user=xxx`
+`password=xxxx`
+
+`[nz_fieldworker]`
+`host=localhost`
+`user=xxx`
+`password=xxx`
+`database=FIELD_2024_BADOatNZ`
+
+Once your credentials are stored you will be able to establish a connection to the entire database that you have access to. Note that if you run `dbcon()` outside of Seewiesen you will get the following warning message, which indicates you are using `scidb_replica`:
+`Warning message:`
+`In dbcon() : Connection to “scidb” failed, using “scidb_replica”.`
+This simply lets you know that you are using `scidb_replica` - you can ignore this message and proceed
+```{r}
+con = dbcon()
+```
+
+To connect specifically to the `FIELD_2024_BADOatNZ` database use SQL syntax within the `dbExecute()` function:
+```{r}
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
+```
+
+Now you can query within a specific table of the `FIELD_2024_BADOatNZ` database.
+For example to access all records in the `CAPTURES` table:
+```{r}
+captures_2024 <- dbq(con, "SELECT * FROM CAPTURES")
+```
+
+To produce and interactive table of the the data, we can use the `datatable` function from the `DT` package:
+```{r}
+captures_2024 %>% 
+  datatable(class = 'cell-border stripe', rownames = FALSE, filter = 'top')
+```
+
+## Merging tables
+We will often need to merge two or more tables from the database based on a common relational variable. For example, one might want to get all the tag deployment locations.
+
+### Example: merge CAPTURES and GPS tables
+The spatial information of each observation in the `CAPTURE`table is stored in the `GPS` table as the Join Keys "gps_id" and "gps_point". Using dplyr syntax, we can merge these two tables based on the "gps_id" and "gps_point" columns. Check out the interactive table and confirm that the `lat` and `lon` columns have now been added:
+```{r}
+dbq(con, "SELECT * FROM CAPTURES") %>% 
+  left_join(., dbq(con, "SELECT * FROM GPS_POINTS"), by = c("gps_id", "gps_point")) %>% 
+  datatable(class = 'cell-border stripe', rownames = FALSE, filter = 'top')
+```
+
+A useful scenario to consider is the need to make a table of all the tag deployment locations, times, and dates. To do this we would consolidate the output of the `CAPTURES` and `GPS` merge by taking the following wrangling steps:
+```{r}
+tag_deployments_2024 <- 
+  # merge the `CAPTURES` and `GPS` by "gps_id" and "gps_point"
+  dbq(con, "SELECT * FROM CAPTURES") %>% 
+   left_join(., dbq(con, "SELECT * FROM GPS_POINTS"), by = c("gps_id", "gps_point")) %>% 
+  
+  # exclude captures that has no `tag_id`
+  filter(!is.na(tag_id)) %>% 
+  
+  # assign only one capture time (i.e., some observations have missing data for `cap_start`, `caught`, `released`)
+  rowwise() %>%
+  mutate(time = as.hms(max(cap_start, caught, released, na.rm = TRUE))) %>%
+  
+  # subset to the first capture
+  group_by(ring) %>%
+  arrange(date, time) %>%
+  slice(1) %>%
+  ungroup() %>%
+  
+  # clean up the leg marking columns to a) remove erroneous white space
+  mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
+  
+  # b) add "FW" to the start of each string on the `UL` that has only 2 characters 
+  # (i.e., FW stands for "flag-white" and should be placed in front of the 
+  # 2-character string engraved on each flag) 
+  mutate(UR = if_else(nchar(UR) == 2, paste0("FW", UR), UR))  %>%
+  
+  # c) put a "M" if both tiba are blank (i.e., in cases when it was forgotten 
+  # to enter the location of the "M")
+  mutate(across(c(LL, LR), ~ str_replace(., "M", ""))) %>%
+  
+  # d) replace empty data with an "X"
+  mutate(across(c(UL, LL, UR, LR), ~ if_else(is.na(.), "X", .)))  %>%
+  
+  # e) create a column called "mark" which combines the color bands into a combo (e.g., BO-WR) or gives the flag code
+  mutate(mark = case_when(
+    nchar(LL) == 2 & nchar(LR) == 2 ~ paste0(LL, "-", LR),  # LL and LR have 2 characters
+    nchar(UL) == 4 ~ UL,  # UL has 4 characters
+    nchar(UR) == 4 ~ UR,  # UR has 4 characters
+    TRUE ~ NA_character_  # If none of the conditions are met, assign NA
+  )) %>%
+  
+  # f) if the mark is a flag then replace the "FW" with "flag"
+  mutate(mark = if_else(
+    str_starts(mark, "FW"),  # Check if the string starts with "FW"
+    str_replace(mark, "^FW", "Flag-"),  # Replace "FW" with "Flag-" at the start
+    mark  # Otherwise, keep the original value
+  )) %>% 
+  
+  # set the time to local NZ time
+  mutate(local_deployment_time = as.POSIXct(with_tz(ymd_hms(paste(date, time, sep = " "), tz = 'Pacific/Auckland'), 'Pacific/Auckland'))) %>% 
+  
+  # consolidate to the columns of interest
+  select(site, local_deployment_time, field_sex, ring, mark, tag_id, tag_type, lat, lon) %>% 
+  
+  # sort by deployment date
+  arrange(local_deployment_time)
+```
+
+we can see the resulting table here
+```{r}
+tag_deployments_2024 %>% 
+  datatable(class = 'cell-border stripe', rownames = FALSE, filter = 'top')
+```
+
+and we can export the table to excel like this (note that Excel will ignore the 'Pacific/Auckland' timezone specified in R and will display the `local_deployment_time` column in UTC)
+```{r}
+write.xlsx(tag_deployments_2024, 
+           file = here("data/bdot_tag_deployments_2024.xlsx"), 
+           sheetName = "Sheet1", 
+           rowNames = FALSE)
+```
+
+### Example: make a table of all combos and flags assigned
+Tony Habraken provides excellent resighting information from the Auckland region. He has recently asked me for a list of all the potential combinations and flags assigned to aid him in the field. Here are some commented steps to wrangle the data into a format for Tony.
+
+first import the pre-2024 captures and tidy it up
+```{r}
+caps_pre2024 <-
+  # import the pre-2024 captures table of the Google Sheets database prepared
+  read_sheet("https://docs.google.com/spreadsheets/d/1Tp26Z23HSXXZSoGXD4dbP3xukhrY1kWhzQrbtRHt4EY/edit?usp=sharing",
+             sheet = "Captures", col_types = "c") %>%
+
+  # subset to Banded Dotterels
+  filter(species == "BADO") %>%
+
+  # pad the date column so that there is a zero added in front of cases with
+  # only 3 characters (e.g., 1st Oct is 110, but should be 0110)
+  mutate(date = str_pad(date, side = "left", width = 4, pad = "0")) %>%
+
+  # format the date column (if there are data entered)
+  mutate(date = ifelse(!is.na(date),
+                       paste(year, substring(date, first = 3, last = 4),
+                                   substring(date, first = 1, last = 2),
+                             sep = "-"), NA) %>% as.Date()) %>%
+
+  # pad the time column so that there is a zero added in front of cases with
+  # only 3 characters (e.g., 110 is 1:10AM, but should be 0110)
+  mutate(time = str_pad(time, width = 4, side = "left", pad = "0")) %>%
+  mutate(time = ifelse(!is.na(time),
+                       paste0(substr(time, 1, 2), ":",
+                              substr(time, 3, 4), ":00"), NA) %>% as_hms) %>% 
+  
+  # bind time and date together and set local timezone
+  mutate(local_capture_time = 
+           ifelse(!is.na(time), ymd_hms(paste(date, time, sep = " "), 
+                                        tz = 'Pacific/Auckland'),
+                  NA) %>% as.POSIXct(tz = 'Pacific/Auckland')) %>%
+  
+  # subset to the first capture of each metal ring and color combo
+  group_by(ring, code) %>% 
+  arrange(local_capture_time) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  
+  # make age column consistent such that juveniles and classed as "P" (i.e., pulli)
+  mutate(age = ifelse(age == "J", "P", age),
+         sex = ifelse(age == "P", "U", sex)) %>% 
+  
+  mutate(tibia_color = str_extract(code, "(?<=\\|).") %>% if_else(. == "X", NA_character_, .)) %>% 
+  
+  # make the code column easier to interpret for Tony by putting the colors in XX-XX syntax
+  mutate(mark = ifelse(tibia_color != "F" & tibia_color != "M" & !is.na(tibia_color),
+                       paste(substr(code, 4, 5), substr(code, 7, 8), sep = "-"),
+                       ifelse(nchar(code) == 11, 
+                              paste(substr(code, 4, 5), substr(code, 10, 11), sep = "-"),
+                              ifelse(nchar(code) == 12,
+                                     paste("whiteflag", substr(code, 5, 6), substr(code, 11, 12), sep = "-"),
+                                      ifelse(tibia_color == "F",
+                                             paste("whiteflag", substr(code, 5, 6), substr(code, 12, 13), sep = "-"), 
+                                             NA))))) %>% 
+  
+  # make a tag column that indicates if the bird ever had a tag
+  mutate(tag = ifelse(!is.na(tag) & tag != "-" & tag != "0", 1, 0)) %>%
+  
+  # consolidate and reduce the relevent columns
+  select(population, ring, mark, sex, age, local_capture_time, tag) %>%
+  
+  # subset to the last capture of each metal ring (i.e., to get the latest mark assigned)
+  group_by(ring) %>% 
+  arrange(desc(local_capture_time)) %>% 
+  slice(1) %>% 
+  ungroup() %>%
+  
+  # sort by deployment date
+  arrange(local_capture_time)
+```
+
+Next import the 2024 captures and tidy it up
+```{r}
+caps_2024 <-
+  dbq(con, "SELECT * FROM CAPTURES") %>% 
+  rename(sex = field_sex) %>%
+  mutate(age = ifelse(age == "J", "P", age)) %>% 
+  mutate(sex = ifelse(age == "P", "U", sex)) %>% 
+  
+  # rename the site codes for better interpretation
+  mutate(population = ifelse(site == "KT", "Kaitorete", 
+                             ifelse(site == "PB", "Porters_Beach",
+                                    ifelse(site == "KP", "Kena_Peninsula",
+                                           ifelse(site == "MS", "Motueka_Spit",
+                                                  ifelse(site == "KK", "Kaikoura",
+                                                         ifelse(site == "TS", "Tasman_Valley", 
+                                                                ifelse(site == "CR", "Cass_River",
+                                                                       ifelse(site == "TA", "Te_Anau",
+                                                                              ifelse(site == "TP", "Tiwai_Point", 
+                                                                                     ifelse(site == "CH", "Chathams", 
+                                                                                            ifelse(site == "HC", "Hawkes_Bay_coast", 
+                                                                                                   ifelse(site == "TO", "Tongirio", NA))))))))))))) %>% 
+  
+  # assign only one capture time (i.e., some observations have missing data for `cap_start`, `caught`, `released`)
+  rowwise() %>%
+  mutate(time = as.hms(max(cap_start, caught, released, na.rm = TRUE))) %>%
+  
+  # subset to the first capture
+  group_by(ring) %>%
+  arrange(date, time) %>%
+  slice(1) %>%
+  ungroup() %>%
+  
+  # clean up the leg marking columns to a) remove erroneous white space
+  mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
+  
+  # b) add "FW" to the start of each string on the `UL` that has only 2 characters 
+  # (i.e., FW stands for "flag-white" and should be placed in front of the 
+  # 2-character string engraved on each flag) 
+  mutate(UR = if_else(nchar(UR) == 2, paste0("FW", UR), UR))  %>%
+  
+  # c) put a "M" if both tiba are blank (i.e., in cases when it was forgotten 
+  # to enter the location of the "M")
+  mutate(across(c(LL, LR), ~ str_replace(., "M", ""))) %>%
+  
+  # d) replace empty data with an "X"
+  mutate(across(c(UL, LL, UR, LR), ~ if_else(is.na(.), "X", .)))  %>%
+  
+  # e) create a column called "mark" which combines the color bands into a combo (e.g., BO-WR) or gives the flag code
+  mutate(mark = case_when(
+    nchar(LL) == 2 & nchar(LR) == 2 ~ paste0(LL, "-", LR),  # LL and LR have 2 characters
+    nchar(UL) == 4 ~ UL,  # UL has 4 characters
+    nchar(UR) == 4 ~ UR,  # UR has 4 characters
+    TRUE ~ NA_character_  # If none of the conditions are met, assign NA
+  )) %>%
+  
+  # f) if the mark is a flag then replace the "FW" with "flag"
+  mutate(mark = if_else(
+    str_starts(mark, "FW"),  # Check if the string starts with "FW"
+    str_replace(mark, "^FW", "whiteflag("),  # Replace "FW" with "whiteflag(" at the start
+    mark  # Otherwise, keep the original value
+  )) %>% 
+  
+  mutate(mark = if_else(
+    str_starts(mark, "whiteflag"),
+    paste0(mark, ")"), 
+    mark  # Otherwise, keep the original value
+  )) %>% 
+    
+  mutate(mark = ifelse(age == "P" & nchar(LR) == 1 & LR != "X", paste0("XX-", LR, "X"), mark)) %>% 
+  mutate(mark = ifelse(age == "P" & nchar(LL) == 1 & LL != "X", paste0(LL, "X", "-XX"), mark)) %>% 
+  mutate(mark = ifelse(str_detect(UR, "FO"), paste0("orangeflag-", mark), mark)) %>%
+  
+  # set the time to local NZ time
+  mutate(local_capture_time = as.POSIXct(with_tz(ymd_hms(paste(date, time, sep = " "), tz = 'Pacific/Auckland'), 'Pacific/Auckland'))) %>% 
+  
+  # make a tag column that indicates if the bird ever had a tag
+  mutate(tag = ifelse(!is.na(tag_id) & tag_id != "-" & tag_id != "0", 1, 0)) %>% 
+  
+  # # consolidate and reduce the relevent columns
+  select(population, ring, mark, sex, age, local_capture_time, tag) %>%
+  
+  # sort by deployment date
+  arrange(local_capture_time)
+```
+
+bind the two tables together and remove multiple observations of the same individual
+```{r}
+# bind the pre-2024 and the 2024 caps together
+all_banded_bdots <- 
+  bind_rows(caps_pre2024, caps_2024) %>% 
+  # subset to the latest capture
+  group_by(ring) %>%
+  arrange(desc(local_capture_time)) %>%
+  slice(1) %>%
+  ungroup()
+```
+
+export the table as an Excel sheet
+```{r}
+write.xlsx(all_banded_bdots %>% 
+             rename(UTC_capture_time = local_capture_time) %>% 
+             filter(!is.na(mark)) %>% arrange(UTC_capture_time), 
+           file = here("data/marked_bdots_Feb_2025.xlsx"), 
+           sheetName = "Sheet1", 
+           rowNames = FALSE)
+```
+
+out of curiosity, check the number of birds with unique markings
+```{r}
+all_banded_bdots %>% 
+  filter(str_detect(mark, "XX", negate = TRUE)) %>% nrow()
+```
+
+## Manually entering a resighting record
+When resightings come into via email, social media posts, or FALCON, it is important to add them to the database. For these observations we will use the `RESIGHTINGS_PUBLIC` table.
+To access the database editor, go to [http://behavioural-ecology.orn.mpg.de/db_ui/field_db.php](http://behavioural-ecology.orn.mpg.de/db_ui/field_db.php), you should see the following screen where you can enter the credentials for the Banded Dotterel database (username: bdot, password: XXX).
+
+```{r, echo=FALSE}
+knitr::include_graphics(here("media/Screenshot 2025-02-05 at 14.21.05.png"))
+```
+
+Next select the `FIELD_2024_BADOatNZ` database
+```{r, echo=FALSE}
+knitr::include_graphics(here("media/Screenshot 2025-02-05 at 14.23.06.png"))
+```
+
+Next select the `RESIGHTINGS_PUBLIC` table
+```{r, echo=FALSE}
+knitr::include_graphics(here("media/Screenshot 2025-02-05 at 14.24.41.png"))
+```
+
+Next click `New item`
+```{r, echo=FALSE}
+knitr::include_graphics(here("media/Screenshot 2025-02-05 at 14.26.05.png"))
+```
+
+Now you can enter the resighting record, such as [this one](https://www.facebook.com/share/p/19vxsS3JPZ/?mibextid=wwXIfr) posted in the "New Zealand Bird Identification" Facebook group:
+```{r, echo=FALSE}
+knitr::include_graphics(here("media/Screenshot 2025-02-05 at 14.31.10.png"))
+```
+
+The location that these two birds were seen was "Motueka Estuary". We can use the `geocode()` function in the ggmap package to get the latitude and longitude for this location
+```{r}
+location <- "Motueka Estuary, New Zealand"
+geo_result <- 
+  geocode(location, output = "latlona", source = "google") %>% 
+  mutate(lon = round(lon, 2),
+         lat = round(lat, 2))
+as.data.frame(geo_result)
+```
+
+Now you enter all the data you can glean from the Facebook post, and click "Save" (or click "Save and insert next" if you have another immediate resighting to enter).
+```{r, echo=FALSE}
+knitr::include_graphics("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.25.12.png")
+```
+
+Note that I've downloaded the original photo from Facebook, renamed it as "2025-02-04_MA_Motueka.jpg", and put it in the following OwnCloud directory: [https://owncloud.gwdg.de/index.php/s/nc0v301s0OUyVMR](https://owncloud.gwdg.de/index.php/s/nc0v301s0OUyVMR) This is where any photos from a resighting can be stored.
+
+Note also that the text inserted in the `comments_db` is: "from New Zealand Bird Identification Facebook group; reported with FWM2". I've specified here the exact source within Facebook and I've also made note that another bird was seen with it. `comments_db` is essentially a dedicated space for the database manager to make a relevent comment about the resighting.
+
+## Editing a resighting observation
+If you need to correct an observation, you can click "Select data" in the `Table: RESIGHTINGS_PUBLIC` page
+```{r, echo=FALSE}
+knitr::include_graphics("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.44.42.png")
+```
+
+then click "edit" on the observation you'd like to modify.
+```{r, echo=FALSE}
+knitr::include_graphics("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.42.40.png")
+```
