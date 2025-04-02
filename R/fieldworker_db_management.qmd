@@ -1,7 +1,7 @@
 ---
 title: "Banded Dotterel Database Management"
 date: "`r format(Sys.time(), '%H:%M %d %B, %Y')`"
-author: 
+author:
  - name: Luke Eberhart-Hertel
    orcid: 0000-0001-7311-6088
    email: luke.eberhart@bi.mpg.de
@@ -15,7 +15,7 @@ affiliations:
  - id: bk
    number: 1
    name: Department of Ornithology, Max Planck Institute for Biological Intelligence, Seewiesen, Germany
-format: 
+format:
   html:
     toc: true
     code-fold: false
@@ -26,9 +26,10 @@ format:
 execute:
   warning: false
   cache: true
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
+
 ```{r, echo=FALSE}
 knitr::clean_cache()
 knitr::opts_chunk$set(cache = FALSE)
@@ -36,14 +37,18 @@ options(repos = c(CRAN = "https://cran.rstudio.com"))
 ```
 
 ## Prerequisites
+
 ### R packages
+
 install Mihai's dbo and apis packages from the mpio-be GitHub repository
+
 ```{r, eval=FALSE}
 remotes::install_github("mpio-be/dbo")
 remotes::install_github("mpio-be/apis")
 ```
 
 The following packages are needed for the code in this document to run and can be easily installed from [CRAN](http://cran.r-project.org/) by running the following code chunk:
+
 ```{r, message=FALSE, results='hide', warning=FALSE, cache=FALSE}
 # Set a CRAN mirror before installing packages
 options(repos = c(CRAN = "https://cloud.r-project.org"))
@@ -52,7 +57,7 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 packages_required_in_project <-
   c("dbo", "DBI", "tidyverse", "hms", "sf", 
     "xml2", "DT", "openxlsx", "here", "googlesheets4", 
-    "ggmap", "data.table", "readxl", "openxlsx", "mapview")
+    "ggmap", "data.table", "readxl", "mapview")
 
 # of the required packages, check if some need to be installed
 new.packages <- 
@@ -67,6 +72,7 @@ lapply(packages_required_in_project, require, character.only = TRUE)
 ```
 
 set the home directory to where the project is locally based (i.e., to find the relevant datasets to import, etc.)
+
 ```{r, message=FALSE, results='hide', warning=FALSE, cache=FALSE}
 here::set_here()
 ```
@@ -81,57 +87,55 @@ here::set_here()
     # "tidyterra", "tidyverse", "adehabitatLT"
 ```
 
-### Set up database access 
+### Set up database access
+
 In this case we want to set up our access to the FIELD_2024_BADOatNZ database hosted on scidb.mpio.orn.mpg.de.
 
 First run the `my.cnf()` to access your credentials
+
 ```{r, eval=FALSE}
 my.cnf()
 ```
 
 For example, your `my.cnf()` file could contain the following information in which you would need to enter your username ('user') and password:
 
-`[scidb_replica]`
-`host=134.76.24.182`
-`user=xxx`
-`password=xxxx`
+`[scidb_replica]` `host=134.76.24.182` `user=xxx` `password=xxxx`
 
-`[nz_fieldworker]`
-`host=localhost`
-`user=xxx`
-`password=xxx`
-`database=FIELD_2024_BADOatNZ`
+`[nz_fieldworker]` `host=localhost` `user=xxx` `password=xxx` `database=FIELD_2024_BADOatNZ`
 
-Once your credentials are stored you will be able to establish a connection to the entire database that you have access to. Note that if you run `dbcon()` outside of Seewiesen you will get the following warning message, which indicates you are using `scidb_replica`:
-`Warning message:`
-`In dbcon() : Connection to “scidb” failed, using “scidb_replica”.`
-This simply lets you know that you are using `scidb_replica` - you can ignore this message and proceed
+Once your credentials are stored you will be able to establish a connection to the entire database that you have access to. Note that if you run `dbcon()` outside of Seewiesen you will get the following warning message, which indicates you are using `scidb_replica`: `Warning message:` `In dbcon() : Connection to “scidb” failed, using “scidb_replica”.` This simply lets you know that you are using `scidb_replica` - you can ignore this message and proceed
+
 ```{r}
 con = dbcon()
 ```
 
 To connect specifically to the `FIELD_2024_BADOatNZ` database use SQL syntax within the `dbExecute()` function:
+
 ```{r}
 dbExecute(con, "USE FIELD_2024_BADOatNZ")
 ```
 
-Now you can query within a specific table of the `FIELD_2024_BADOatNZ` database.
-For example to access all records in the `CAPTURES` table:
+Now you can query within a specific table of the `FIELD_2024_BADOatNZ` database. For example to access all records in the `CAPTURES` table:
+
 ```{r}
 captures_2024 <- dbq(con, "SELECT * FROM CAPTURES")
 ```
 
 To produce and interactive table of the the data, we can use the `datatable` function from the `DT` package:
+
 ```{r}
 captures_2024 %>% 
   datatable(class = 'cell-border stripe', rownames = FALSE, filter = 'top')
 ```
 
 ## Merging and Wrangling tables
+
 We will often need to merge two or more tables from the database based on a common relational variable. For example, one might want to get all the tag deployment locations.
 
 ### Example: merge CAPTURES and GPS tables
+
 The spatial information of each observation in the `CAPTURE`table is stored in the `GPS` table as the Join Keys "gps_id" and "gps_point". Using dplyr syntax, we can merge these two tables based on the "gps_id" and "gps_point" columns. Check out the interactive table and confirm that the `lat` and `lon` columns have now been added:
+
 ```{r}
 dbq(con, "SELECT * FROM CAPTURES") %>% 
   left_join(., dbq(con, "SELECT * FROM GPS_POINTS"), by = c("gps_id", "gps_point")) %>% 
@@ -139,6 +143,7 @@ dbq(con, "SELECT * FROM CAPTURES") %>%
 ```
 
 A useful scenario to consider is the need to make a table of all the tag deployment locations, times, and dates. To do this we would consolidate the output of the `CAPTURES` and `GPS` merge by taking the following wrangling steps:
+
 ```{r}
 tag_deployments_2024 <- 
   # merge the `CAPTURES` and `GPS` by "gps_id" and "gps_point"
@@ -199,23 +204,27 @@ tag_deployments_2024 <-
 ```
 
 we can see the resulting table here
+
 ```{r}
 tag_deployments_2024 %>% 
   datatable(class = 'cell-border stripe', rownames = FALSE, filter = 'top')
 ```
 
 and we can export the table to excel like this (note that Excel will ignore the 'Pacific/Auckland' timezone specified in R and will display the `local_deployment_time` column in UTC)
-```{r}
+
+```{r, eval=FALSE}
 write.xlsx(tag_deployments_2024, 
-           file = here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/bdot_tag_deployments_2024.xlsx"), 
+           file = here("data/bdot_tag_deployments_2024.xlsx"), 
            sheetName = "Sheet1", 
            rowNames = FALSE)
 ```
 
 ### Example: make a table of all combos and flags assigned
-Tony Habraken provides excellent resighting information from the Auckland region. He has recently asked me for a list of all the potential combinations and flags assigned to aid him in the field. Here are some commented steps to wrangle the data into a format for Tony.
+
+Tony Habraken provides excellent resighting information from the Waikato, Auckland, and lower Northland regions. He has recently asked me for a list of all the potential combinations and flags assigned to aid him in the field. Here are some commented steps to wrangle the data into a format for Tony.
 
 first import the pre-2024 captures and tidy it up
+
 ```{r}
 caps_pre2024 <-
   # import the pre-2024 captures table of the Google Sheets database prepared
@@ -288,33 +297,35 @@ caps_pre2024 <-
 ```
 
 Next import the 2024 captures and tidy it up
+
 ```{r}
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
 caps_2024 <-
-  # dbq(con, "SELECT * FROM CAPTURES") %>% 
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/CAPTURES_breeding_season_2024.csv"), colClasses = "character") %>% 
+  dbq(con, "SELECT * FROM CAPTURES") %>%
   rename(sex = field_sex) %>%
   mutate(age = ifelse(age == "J", "P", age)) %>% 
   mutate(sex = ifelse(age == "P", "U", sex)) %>% 
-  
-  # rename the site codes for better interpretation
-  mutate(population = ifelse(site == "KT", "Kaitorete", 
-                             ifelse(site == "PB", "Porters_Beach",
-                                    ifelse(site == "KP", "Kena_Peninsula",
-                                           ifelse(site == "MS", "Motueka_Spit",
-                                                  ifelse(site == "KK", "Kaikoura",
-                                                         ifelse(site == "TS", "Tasman_Valley", 
-                                                                ifelse(site == "CR", "Cass_River",
-                                                                       ifelse(site == "TA", "Te_Anau",
-                                                                              ifelse(site == "TP", "Tiwai_Point", 
-                                                                                     ifelse(site == "CH", "Chathams", 
-                                                                                            ifelse(site == "HC", "Hawkes_Bay_coast", 
-                                                                                                   ifelse(site == "TO", "Tongirio", 
-                                                                                                          ifelse(site == "OM", "Old Man Range",
-                                                                                                          ifelse(site == "PR", "Pisa Range", NA))))))))))))))) %>% 
+  mutate(population = recode(site, 
+                           "KT" = "Kaitorete", 
+                           "PB" = "Porters_Beach",
+                           "KP" = "Kena_Peninsula",
+                           "MS" = "Motueka_Spit",
+                           "KK" = "Kaikoura",
+                           "TS" = "Tasman_Valley",
+                           "CR" = "Cass_River",
+                           "TA" = "Te_Anau",
+                           "TP" = "Tiwai_Point",
+                           "CH" = "Chathams",
+                           "HC" = "Hawkes_Bay_coast",
+                           "TO" = "Tongariro",
+                           "OM" = "Old_Man_Range",
+                           "PR" = "Pisa_Range",
+                           .default = as.character(NA))) %>% 
   
   # assign only one capture time (i.e., some observations have missing data for `cap_start`, `caught`, `released`)
   rowwise() %>%
-  mutate(time = as.hms(max(cap_start, caught, released, na.rm = TRUE))) %>% 
+  mutate(time = as_hms(max(cap_start, caught, released, na.rm = TRUE))) %>% 
   
   # subset to the first capture
   group_by(ring) %>%
@@ -376,6 +387,7 @@ caps_2024 <-
 ```
 
 bind the two tables together and remove multiple observations of the same individual
+
 ```{r}
 # bind the pre-2024 and the 2024 caps together
 all_banded_bdots <- 
@@ -387,8 +399,9 @@ all_banded_bdots <-
   ungroup()
 ```
 
-export the table as an Excel sheet
-```{r}
+export the table as an Excel sheet (if wanted)
+
+```{r, eval=FALSE}
 write.xlsx(all_banded_bdots %>% 
              rename(UTC_capture_time = local_capture_time) %>% 
              filter(!is.na(mark)) %>% arrange(UTC_capture_time), 
@@ -398,24 +411,515 @@ write.xlsx(all_banded_bdots %>%
 ```
 
 out of curiosity, check the number of birds with unique markings
+
 ```{r}
 all_banded_bdots %>% 
   filter(str_detect(mark, "XX", negate = TRUE)) %>% nrow()
 ```
 
+### Example: make a table for Michelle of all the marks we've used since starting the project
+
+### pre-2024 data and wrangle the columns needed
+
+```{r}
+caps_pre2024 <-
+  # import the pre-2024 captures table of the Google Sheets database prepared
+  read_sheet("https://docs.google.com/spreadsheets/d/1Tp26Z23HSXXZSoGXD4dbP3xukhrY1kWhzQrbtRHt4EY/edit?usp=sharing",
+             sheet = "Captures", col_types = "c") %>%
+
+  # subset to Banded Dotterels
+  filter(species == "BADO") %>%
+
+  # pad the date column so that there is a zero added in front of cases with
+  # only 3 characters (e.g., 1st Oct is 110, but should be 0110)
+  mutate(date = str_pad(date, side = "left", width = 4, pad = "0")) %>%
+
+  # format the date column (if there are data entered)
+  mutate(date = ifelse(!is.na(date),
+                       paste(year, substring(date, first = 3, last = 4),
+                                   substring(date, first = 1, last = 2),
+                             sep = "-"), NA) %>% as.Date()) %>%
+
+  # pad the time column so that there is a zero added in front of cases with
+  # only 3 characters (e.g., 110 is 1:10AM, but should be 0110)
+  mutate(time = str_pad(time, width = 4, side = "left", pad = "0")) %>%
+  mutate(time = ifelse(!is.na(time),
+                       paste0(substr(time, 1, 2), ":",
+                              substr(time, 3, 4), ":00"), NA) %>% as_hms) %>% 
+  
+  # bind time and date together and set local timezone
+  mutate(local_capture_time = 
+           ifelse(!is.na(time), ymd_hms(paste(date, time, sep = " "), 
+                                        tz = 'Pacific/Auckland'),
+                  NA) %>% as.POSIXct(tz = 'Pacific/Auckland')) %>%
+  
+  # subset to the first capture of each metal ring and color combo
+  group_by(ring, code) %>% 
+  arrange(local_capture_time) %>% 
+  slice_tail(n = 1) %>% 
+  ungroup() %>% 
+  
+  # make age column consistent such that juveniles and classed as "P" (i.e., pulli)
+  mutate(age = case_when(
+      age == "A" ~ "A",
+      age == "J" ~ "P",
+      age == "P" ~ "P",
+      is.na(age) ~ "U"
+    )) %>% 
+  mutate(sex = case_when(
+      sex == "J" ~ "U",
+      sex == "F" ~ "F",
+      sex == "M" ~ "M",
+      sex == "F?" ~ "FU",
+      sex == "M?" ~ "MU",
+      sex == "U" ~ "U",
+      is.na(sex) ~ "U"
+    )) %>% 
+  # Extract components using regex
+  mutate(
+    UL = str_extract(code, "^[^.]+"),        # Before first "."
+    LL = str_extract(code, "(?<=\\.)[^|]+"), # Between "." and "|"
+    UR = str_extract(code, "(?<=\\|)[^.]+"), # Between "|" and "."
+    LR = str_extract(code, "(?<=\\.)[^.]+$"))%>% 
+  mutate(
+    # Remove only one "X" when it appears once or twice
+    UL = str_replace(UL, "X", ""),
+    LL = str_replace(LL, "X", ""),
+    UR = str_replace(UR, "X", ""),
+    LR = str_replace(LR, "X", "")
+  ) %>% 
+  # assign the tag type based on the first 2 characters of the tag ID
+  mutate(tag_type = ifelse(str_sub(tag, 1, 2) %in% c("66", "23"), "PTT", 
+                           ifelse(str_sub(tag, 1, 2) %in% c("55", "21", "20", "dr", "06", "04", "03"), "GPS", NA))) %>% 
+  # extract the tag ID
+  mutate(tag_id = ifelse(tag_type %in% c("PTT", "GPS"), tag, NA))  %>% 
+
+  # specify the project name for a given capture
+  mutate(Project_Name = ifelse(site == "TP", "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project",
+                               ifelse(is.na(bill) & observer == "KG", "Mackenzie drylands bird movements MSc study", 
+                                "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project"))) %>% 
+  # consolidate and reduce the relevant columns
+  select(ring, local_capture_time, species, age, sex, site, UL, LL, UR, LR, tag_type, tag_id, Project_Name) %>% 
+  
+  # sort by deployment date
+  arrange(local_capture_time)
+```
+
+View the pre-2024 captures
+
+```{r}
+caps_pre2024 %>% 
+  datatable(class = 'cell-border stripe', rownames = FALSE, filter = 'top')
+```
+
+### Ted's data from Kaikoura
+
+```{r}
+ted_caps <-
+  # import Ted's excel sheet and clean up the column names
+  read_xlsx(path = "/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/DotsBanded2020_20_March_25.xlsx",
+            col_types = "text", 
+            sheet = 1) %>% 
+  dplyr::select('Banded Dotterel Kaikoura', 'From Photos of Lindsay\'s Banding Sheets - 2017_01_11 Dot banding slip', '...3', '...4', '...6', '...7') %>% 
+  dplyr::slice(3:n()) %>% 
+  rename(flag = 'Banded Dotterel Kaikoura',
+         date = 'From Photos of Lindsay\'s Banding Sheets - 2017_01_11 Dot banding slip',
+         ring = '...3', 
+         code = '...4',
+         age = '...6',
+         sex = '...7') %>% 
+  # wrangle the color code based on if there is a a flag or not
+  mutate(code = ifelse(!is.na(flag) & nchar(code) == 4, 
+                       paste0(flag, "X.", str_sub(code, 1, 2), "|MX.", str_sub(code, 3, 4)),
+                       ifelse(nchar(code) == 4,
+                              paste0("XX.", str_sub(code, 1, 2), "|MX.", str_sub(code, 3, 4)), 
+                              "UN")),
+         # wrangle age
+         age = str_sub(age, 1, 1)) %>% 
+  # wrangle the local cpature time column
+  mutate(local_capture_time = as.POSIXct(as.Date(as.numeric(date), origin = "1899-12-30"), tz = "Pacific/Auckland")) %>% 
+  # wrangle the sex based on the presence/absence of sex and/or age data
+  mutate(sex = ifelse(is.na(sex) & age == "P", "P", 
+                      ifelse(is.na(sex) & age == "F", "F",
+                             ifelse(is.na(sex) & age == "M", "M",
+                                    ifelse(str_detect(sex, "F"), "F", 
+                                           ifelse(str_detect(sex, "M"), "M",
+                                                  ifelse(str_detect(sex, "P"), "P", "U")))))),
+         # merge the "CP" prefix to the ring number
+         ring = ifelse(str_detect(ring, "CP"), ring, paste0("CP", ring))) %>% 
+  # clean up combo strings with "W" in the tibia (i.e., for the few cases with FW)
+  mutate(code = if_else(substr(code, 1, 1) == "W", 
+                        paste0("X", substr(code, 2, nchar(code))), 
+                        code)) %>% 
+  # clean up the age data (e.g., both "J" and "P" should be "P", blank should be "U")
+  mutate(age = case_when(
+      age == "A" ~ "A",
+      age == "J" ~ "P",
+      age == "P" ~ "P",
+      !is.na(sex) ~ "A",
+      is.na(age) ~ "U"
+    )) %>% 
+  # clean up the sex data
+  mutate(sex = case_when(
+      sex == "J" ~ "U",
+      sex == "F" ~ "F",
+      sex == "M" ~ "M",
+      sex == "F?" ~ "FU",
+      sex == "M?" ~ "MU",
+      sex == "U" ~ "U",
+      is.na(sex) ~ "U"
+    )) %>% 
+  # Extract components using regex for the different leg segments
+  mutate(
+    UL = str_extract(code, "^[^.]+"),        # Before first "."
+    LL = str_extract(code, "(?<=\\.)[^|]+"), # Between "." and "|"
+    UR = str_extract(code, "(?<=\\|)[^.]+"), # Between "|" and "."
+    LR = str_extract(code, "(?<=\\.)[^.]+$"))%>% 
+  mutate(
+    # Remove only one "X" when it appears once or twice
+    UL = str_replace(UL, "X", ""),
+    LL = str_replace(LL, "X", ""),
+    UR = str_replace(UR, "X", ""),
+    LR = str_replace(LR, "X", "")
+  ) %>%
+  # put a "FW" in cases where there is a "W" in the flag column
+  mutate(UL = ifelse(flag == "W", "FW", UL)) %>% 
+  # consolidate/add columns for subsequent merge with the other banding sources (e.g., pre-2024, tony_caps, etc.)
+  mutate(tag_type = NA) %>% 
+  mutate(tag_id = NA) %>% 
+  mutate(site = "KK") %>% 
+  select(-flag) %>% 
+  mutate(Project_Name = "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project") %>% 
+  select(-date)
+```
+
+### Tony's data from Port Waikato / Miranda
+
+```{r}
+tony_caps <-
+  # import Ted's excel sheet and clean up the column names
+  read_xlsx(path = "/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/BD colour codes for AK.xlsx",
+            sheet = 1) %>% 
+  dplyr::select('...1', '...3', '...4', '...5', '...6', '...7', '...8') %>% 
+  dplyr::slice(3:n()) %>% 
+  rename(flag = '...1',
+         date = '...5',
+         ring = '...4', 
+         code = '...3',
+         site = '...6',
+         age = '...7',
+         sex = '...8') %>% 
+  filter(!is.na(date))  %>% 
+  mutate(local_capture_time = as.POSIXct(as.Date(as.numeric(date), origin = "1899-12-30"), tz = "Pacific/Auckland")) %>% 
+  mutate(age = case_when(
+      age == "juv" ~ "P",
+      age == "unknown" ~ "U",
+      age == "ad" ~ "A",
+      age == "chick" ~ "P"
+    )) %>% 
+  mutate(sex = case_when(
+      sex == "J" ~ "U",
+      sex == "F" ~ "F",
+      sex == "M" ~ "M",
+      sex == "F?" ~ "FU",
+      sex == "M?" ~ "MU",
+      sex == "U" ~ "U",
+      is.na(sex) ~ "U"
+    )) %>% 
+  # Extract components using regex
+  mutate(
+    UL = "*",        # Before first "."
+    LL = str_sub(code, 1, 2), # Between "." and "|"
+    UR = "FW", # Between "|" and "."
+    LR = str_sub(code, 3, 4)) %>% 
+  mutate(tag_type = NA) %>% 
+  mutate(tag_id = NA) %>% 
+  select(-c(flag, code)) %>% 
+  mutate(species = "BADO") %>% 
+  mutate(Project_Name = "OSNZ/BirdsNZ South Auckland Banded Dotterel") %>% 
+  select(-date)
+```
+
+### 2024 capture data (nationwide)
+
+```{r}
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
+caps_2024 <-
+  dbq(con, "SELECT * FROM CAPTURES") %>% 
+  rename(sex = field_sex) %>%
+  mutate(age = case_when(
+      age == "A" ~ "A",
+      age == "J" ~ "P",
+      age == "P" ~ "P",
+      is.na(age) ~ "U"
+    )) %>%
+  mutate(sex = ifelse(age == "P", "U", sex)) %>% 
+  # assign only one capture time (i.e., some observations have missing data for `cap_start`, `caught`, `released`)
+  rowwise() %>%
+  mutate(time = as_hms(max(cap_start, caught, released, na.rm = TRUE))) %>% 
+  
+  # subset to the first capture
+  group_by(ring) %>%
+  arrange(date, time) %>%
+  slice_tail(n = 1) %>%
+  ungroup() %>%
+  
+  mutate(species = "BADO") %>% 
+
+  # clean up the leg marking columns to a) remove erroneous white space
+  mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
+  # put an X in all leg-mark cases that are blank
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
+  # put an "FW" in front of all text that is not X, M, FO, or starting with FW in the UL and UR positions 
+  mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M", "FO", "G", "R", "O", "W", "L", "Y") | grepl("^FW", .) | is.na(.), ., paste0("FW", .)))) %>%
+  # put a note in the ring field for the two birds that didn't get a metal band
+  mutate(ring = ifelse(str_detect(UR, "FW2K") & pk == 23, "missing_metal_FW2K", 
+                       ifelse(pk == 24 & date == as.Date("2024-10-01"), "missing_metal_O_chick", ring))) %>% 
+  mutate(UR = ifelse(UR == "FWFO", "FO", UR)) %>% 
+
+  # set the time to local NZ time
+  mutate(local_capture_time = as.POSIXct(with_tz(ymd_hms(paste(date, time, sep = " "), tz = 'Pacific/Auckland'), 'Pacific/Auckland'))) %>% 
+  mutate(Project_Name = "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project") %>% 
+  # consolidate and reduce the relevant columns
+  select(ring, local_capture_time, species, age, sex, site, UL, LL, UR, LR, tag_type, tag_id, Project_Name)
+```
+
+### wrangle the data to be in the same format as the NZNBBS
+
+structure with the following columns and order: Prefix, Number, Date, Common_name, Scientific_name, Species_code, Age, Sex, Region_Code, Locality_general, Colour_band_material, Colour_band_type, Colour_band_fixing_type, Mark_uncertainty, Left_tibia, Left_tarsus, Right_tibia, Right_tarsus, Non_leg_mark_type, Non_leg_mark_id
+
+```{r}
+BADO_banding <-
+  bind_rows(tony_caps, ted_caps, caps_pre2024, caps_2024) %>%
+  mutate(
+    Prefix = str_extract(ring, "^[A-Za-z]+"),
+    Number = str_extract(ring, "\\d+")
+  ) %>% 
+  mutate(Prefix = ifelse(is.na(Prefix), "", Prefix)) %>% 
+  mutate(Number = ifelse(Prefix == "missing", Prefix, Number)) %>% 
+  rename(Date = local_capture_time) %>% 
+  mutate(
+    Common_name = "banded dotterel, pohowera",
+    Scientific_name = "Charadrius bicinctus bicinctus",
+    Species_code = "415"
+  ) %>%
+  mutate(
+    Age = case_when(
+      age == "A" ~ "A",
+      age == "J" ~ "P",
+      age == "P" ~ "P"
+    ),
+    Sex = case_when(
+      sex == "J" ~ "U",
+      sex == "F" ~ "F",
+      sex == "M" ~ "M",
+      sex == "F?" ~ "FU",
+      sex == "M?" ~ "MU",
+      sex == "U" ~ "U",
+      sex == "MU" ~ "MU",
+      sex == "FU" ~ "FU"
+    )
+  ) %>% 
+  mutate(
+    Region_Code = case_when(
+      site %in% c("KT", "CR", "KK", "TS", "MC", "TR", "OD", "MB") ~ "11. Canterbury",
+      site %in% c("TA", "TP") ~ "13. Southland",
+      site == "CH" ~ "17. Chathams",
+      site %in% c("HC") ~ "6. Hawke's Bay",
+      site %in% c("KP", "MS", "PB") ~ "14. Tasman",
+      site %in% c("OM", "PR") ~ "12. Otago",
+      site %in% c("TO") ~ "8. Manawatu-Whanganui",
+      site %in% c("Miranda rescue", "Port Waikato") ~ "3. Waikato"
+    ),
+    Locality_general = case_when(
+      site == "KT" ~ "Kaitorete Spit",
+      site == "TS" ~ "Tasman River",
+      site == "KP" ~ "Kena Peninsula",
+      site == "MS" ~ "Motueka Spit",
+      site == "KK" ~ "Kaikoura",
+      site == "CR" ~ "Cass River",
+      site == "TA" ~ "Upukeroa River",
+      site == "TP" ~ "Tiwai Point",
+      site == "CH" ~ "Chathams",
+      site == "HC" ~ "Napier",
+      site == "OM" ~ "Old Man Range",
+      site == "PR" ~ "Pisa Range",
+      site == "PB" ~ "Porters Beach, Abel Tasman National Park",
+      site == "TO" ~ "Rangipo Desert",
+      site == "MC" ~ "Macaulay River",
+      site == "MB" ~ "Maryburn",
+      site == "OD" ~ "Ohau Downs",
+      site == "TR" ~ "Tekapo River",
+      TRUE ~ site
+    )
+  ) %>% 
+  mutate(
+    Colour_band_material = case_when(
+      str_detect(UL, "FW") | str_detect(LL, "FW") | 
+        str_detect(UR, "FW") | str_detect(LR, "FW") ~ "acrylic",
+      str_detect(UL, "^[BGRLOWY]{1,2}$") | str_detect(LL, "^[BGRLOWY]{1,2}$") | 
+        str_detect(UR, "^[BGRLOWY]{1,2}$") | str_detect(LR, "^[BGRLOWY]{1,2}$") ~ "salbex",
+      TRUE ~ ""
+    ),
+    Colour_band_type = case_when(
+      Colour_band_material == "acrylic" ~ "engraved flag",
+      Colour_band_material == "salbex" ~ "wraparound 1.5 wrap",
+      TRUE ~ ""
+    ),
+    Colour_band_fixing_type = case_when(
+      Colour_band_material == "acrylic" ~ "superglue",
+      Colour_band_material == "salbex" ~ "",
+      TRUE ~ ""
+    ),
+    Mark_uncertainty = "",
+    Left_tibia = case_when(
+      UL == "X" ~ "",
+      str_starts(UL, "FW") ~ str_replace(UL, "FW(..)", "FW(\\1)"),
+      UL == "M" ~ "*",
+      is.na(UL) ~ "",
+      UL == "no colours" ~ "",
+      TRUE ~ UL
+    ),
+    Left_tarsus = case_when(
+      LL == "X" ~ "",
+      str_starts(LL, "FW") ~ str_replace(LL, "FW(..)", "FW(\\1)"),
+      str_detect(LL, "[BGRLOWY]") ~ LL,
+      TRUE ~ ""
+    ),
+    Right_tibia = case_when(
+      UR == "X" ~ "",
+      str_starts(UR, "FW") ~ str_replace(UR, "FW(..)", "FW(\\1)"),
+      UR == "M" ~ "*",
+      is.na(UR) ~ "",
+      UL == "no colours" ~ "",
+      TRUE ~ UR
+    ),
+    Right_tarsus = case_when(
+      LR == "X" ~ "",
+      str_starts(LR, "FW") ~ str_replace(LR, "FW(..)", "FW(\\1)"),
+      str_detect(LR, "[BGRLOWY]") ~ LR,
+      TRUE ~ ""
+    ),
+    Non_leg_mark_type = case_when(
+      tag_type == "GPS" ~ tag_type,
+      tag_type == "PTT" ~ tag_type,
+      TRUE ~ ""
+    ),
+    Non_leg_mark_id = case_when(
+      tag_type == "GPS" ~ tag_id,
+      tag_type == "PTT" ~ tag_id,
+      TRUE ~ ""
+    )
+  ) %>% 
+  mutate(Left_tibia = ifelse(nchar(Left_tibia) == 2 & substr(Left_tibia, 1, 1) != "F",
+                               paste0(substr(Left_tibia, 1, 1), "/", substr(Left_tibia, 2, 2)), Left_tibia),
+         Left_tarsus = ifelse(nchar(Left_tarsus) == 2 & substr(Left_tarsus, 1, 1) != "F",
+                                paste0(substr(Left_tarsus, 1, 1), "/", substr(Left_tarsus, 2, 2)), Left_tarsus),
+         Right_tibia = ifelse(nchar(Right_tibia) == 2 & substr(Right_tibia, 1, 1) != "F",
+                                paste0(substr(Right_tibia, 1, 1), "/", substr(Right_tibia, 2, 2)), Right_tibia),
+         Right_tarsus = ifelse(nchar(Right_tarsus) == 2 & substr(Right_tarsus, 1, 1) != "F",
+                                 paste0(substr(Right_tarsus, 1, 1), "/", substr(Right_tarsus, 2, 2)), Right_tarsus)) %>% 
+  mutate(Left_tibia = if_else(nchar(Left_tibia) <= 3 & str_detect(Left_tibia, "L"),
+                                str_replace(Left_tibia, "L", "LG"),
+                                Left_tibia), 
+         Left_tarsus = if_else(nchar(Left_tarsus) <= 3 & str_detect(Left_tarsus, "L"),
+                                str_replace(Left_tarsus, "L", "LG"),
+                                Left_tarsus), 
+         Right_tibia = if_else(nchar(Right_tibia) <= 3 & str_detect(Right_tibia, "L"),
+                                str_replace(Right_tibia, "L", "LG"),
+                                Right_tibia), 
+         Right_tarsus = if_else(nchar(Right_tarsus) <= 3 & str_detect(Right_tarsus, "L"),
+                                str_replace(Right_tarsus, "L", "LG"),
+                                Right_tarsus)) %>% 
+  mutate(Left_tibia = toupper(Left_tibia),
+         Left_tarsus = toupper(Left_tarsus),
+         Right_tibia = toupper(Right_tibia),
+         Right_tarsus = toupper(Right_tarsus)) %>% 
+  dplyr::select(Prefix, Number, Date, Common_name, Scientific_name, Species_code, Age, Sex, Region_Code, Locality_general, 
+                Colour_band_material,	Colour_band_type,	Colour_band_fixing_type,	Mark_uncertainty,	
+                Left_tibia,	Left_tarsus,	Right_tibia,	Right_tarsus,	Non_leg_mark_type,	Non_leg_mark_id, Project_Name) %>% 
+  mutate(remove = ifelse(Number == "9075" & Left_tarsus == "", 1, 
+                         ifelse(Number == "16614" & Left_tibia == "*", 1, 0))) %>% 
+    filter(remove == 0) %>% 
+    dplyr::select(-remove) %>% 
+  mutate(total_chars = nchar(Left_tibia) + nchar(Left_tarsus) + 
+                       nchar(Right_tibia) + nchar(Right_tarsus)) %>% 
+  group_by(Prefix, Number) %>% 
+  mutate(n_obs = n(),
+         max_chars = max(total_chars, na.rm = TRUE)) %>%
+  filter(total_chars == max_chars) %>% 
+  arrange(desc(Date)) %>% 
+  slice(1) %>% 
+  as.data.table() %>% 
+  arrange(desc(n_obs)) %>% 
+  select(-c(total_chars, n_obs, max_chars)) %>% 
+  mutate(Prefix = ifelse(Prefix == "CPcp", "CP", Prefix)) %>% 
+  mutate(Age = ifelse(Age == "" | is.na(Age), "U", Age)) %>% 
+  mutate(Sex = ifelse(Age == "P" & (Sex == "" | is.na(Sex)), "U", Sex)) %>% 
+  mutate(Left_tibia = ifelse(Number == "17025", "*", Left_tibia),
+         Right_tibia = ifelse(Number == "17025", "", Right_tibia))
+```
+
+### write the data as an excel file (if wanted)
+
+```{r, eval=FALSE}
+write.xlsx(BADO_banding, 
+           file = here("data/marked_bdots_Mar_2025_.xlsx"), 
+           sheetName = "Sheet1", 
+           rowNames = FALSE)
+```
+
+### pull out a list of all unique engraved flags used
+
+```{r}
+flags_used <- 
+  c(BADO_banding %>% filter(str_sub(Left_tibia, 1, 3) == "FW(") %>% pull(Left_tibia) %>% unique(), BADO_banding %>% filter(str_sub(Right_tibia, 1, 3) == "FW(") %>% pull(Right_tibia) %>% unique()) %>% sort()
+"FW(MN)" %in% flags_used
+
+# easy line to copy and paste (comma delimited) into email
+flags_used %>% paste(collapse = ", ")
+```
+
+### pull out a list of all duplicate combinations
+
+```{r}
+BADO_banding %>% 
+  mutate(total_chars = nchar(Left_tibia) + nchar(Left_tarsus) + 
+                       nchar(Right_tibia) + nchar(Right_tarsus)) %>% 
+  group_by(Left_tibia,	Left_tarsus,	Right_tibia,	Right_tarsus, total_chars) %>% 
+  summarise(n_rings = n_distinct(Number)) %>% 
+  arrange(desc(n_rings)) %>% 
+  filter(total_chars > 2 & n_rings > 1)
+```
+
+### inspect the duplicate combos
+
+```{r}
+BADO_banding %>% filter(Left_tarsus == "R/B" & Right_tarsus == "W/O")
+BADO_banding %>% filter(Left_tarsus == "R/G" & Right_tarsus == "G/Y")
+BADO_banding %>% filter(Left_tarsus == "R/G" & Right_tarsus == "W/W")
+BADO_banding %>% filter(Left_tarsus == "R/R" & Right_tarsus == "W/Y")
+BADO_banding %>% filter(Left_tarsus == "R/Y" & Right_tarsus == "G/W")
+BADO_banding %>% filter(Right_tibia == "FW(MM)")
+BADO_banding %>% filter(Left_tarsus == "G/W" & Right_tarsus == "G/Y")
+BADO_banding %>% filter(Left_tarsus == "O/O" & Right_tarsus == "G/G")
+BADO_banding %>% filter(Left_tarsus == "W/R" & Right_tarsus == "R/Y")
+BADO_banding %>% filter(Left_tibia == "FW" & Left_tarsus == "R/R" & Right_tarsus == "L/Y")
+```
+
 ### Example: make a table detailing all the tissue samples (blood and feathers) that need to be made into an inventory
+
 We will use the `CAPTURES` table to extract all the first captures (i.e., blood was sampled) for each bird, then reduce to the columns that are relevent for reading the information on each tube: `site`, `date`, `nest_id`, `observer`, and `ring`, as well as other relevent information for cross-checking with the database and field sheets: `age`, `tag_type`, `sample`, `book_id`, and `form_id`. Note that the `sample` column is crucial, as it contains the information about which tissue samples were collected from a given individual.
 
-Note (11 Feb 2025): for some reason the server connection to FIELD_2024_BADOatNZ is not providing the latest data (i.e., it only shows me the data up to )
 ```{r}
-# con = dbcon()
-# dbExecute(con, "USE FIELD_2024_BADOatNZ")
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
 samples <-
-  # dbq(con, "SELECT * FROM CAPTURES") %>%
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/CAPTURES_breeding_season_2024.csv"), colClasses = "character") %>%
+  dbq(con, "SELECT * FROM CAPTURES") %>%
   # reduce to columns of interest (note that "sample" is included to figure out 
   # if there was a Queen's or EDTA sample collected)
-  select(ring, date, nest_id, site, date, observer, age, tag_type, sample, book_id, form_id) %>% 
+  dplyr::select(ring, date, nest_id, site, date, observer, age, field_sex, tag_type, sample, book_id, form_id, tag_id, tag_type) %>% 
   
   mutate(date = as.Date(date)) %>%
   
@@ -425,7 +929,8 @@ samples <-
   slice(1)
 ```
 
-assess if there are any 
+assess if there are any
+
 ```{r}
 caps <- as.data.table(samples)
 caps[, sample := gsub("\\s+", "", sample)]
@@ -442,26 +947,32 @@ caps_ <-
          primary = ifelse(str_detect(col1, "FP") | str_detect(col2, "FP") | str_detect(col3, "FP") | str_detect(col4, "FP"), "Y", "N"),
          breast = ifelse(str_detect(col1, "FB") | str_detect(col2, "FB") | str_detect(col3, "FB") | str_detect(col4, "FB"), "Y", "N"),
          filter = ifelse(str_detect(col4, "B"), "Y", "N")) %>% 
-  select(ring, date, nest_id, site, date, observer, age, tag_type, sample, book_id, form_id, sample, queens, edta, primary, breast, filter) %>%
+  dplyr::select(ring, date, nest_id, field_sex, site, tag_id, tag_type, date, observer, age, tag_id, tag_type, sample, book_id, form_id, sample, queens, edta, primary, breast, filter) %>%
   mutate(queens = ifelse(is.na(queens), "N", queens),
          edta = ifelse(is.na(edta), "N", edta),
          primary = ifelse(is.na(primary), "N", primary),
          breast = ifelse(is.na(breast), "N", breast),
          filter = ifelse(is.na(filter), "N", filter)) %>% 
   mutate(breast = ifelse(breast == "Y" & age == "J", "N", breast),
-         filter = ifelse(sample == "FB" & age == "J", "Y", filter))
+         filter = ifelse(sample == "FB" & age == "J", "Y", filter)) %>% 
+  mutate(queens = ifelse(ring %in% c("CP16614", "CP16653", "CP19368"), "Y", queens)) %>% 
+  mutate(filter = ifelse(ring %in% c("CP19394"), "Y", filter))
+
+# CP16724 is Mr Manakau and thus doesn't have a blood sample.
+# CP19394 Sylvia found the filter paper of this bird (db comment: "Blood was taken on a tissue paper and stored in a paper envelope")
+# CP19933 bird escaped during capture so no blood collected
 
 # need to determine if these had queens or EDTA blood sampled (unclear due to 
 # limited characters allowed in the "sample" column)
 ### adults ----
 issue_samples_A <- 
   caps_ %>% 
-  filter(queens == "N" & edta == "N" & age != "J") %>% # & observer != "LEH" & observer != "PS" & observer != "HP" & observer != "BK") %>% 
+  filter(queens == "N" & edta == "N" & filter == "N" & age != "J") %>% # & observer != "LEH" & observer != "PS" & observer != "HP" & observer != "BK") %>% 
   arrange(date)
 
 issue_samples_summary_A <- 
   issue_samples_A %>% 
-  mutate(site = ifelse(site %in% c("KP", "PB", "MS"), "MS", site)) %>% 
+  # mutate(site = ifelse(site %in% c("KP", "PB", "MS"), "MS", site)) %>% 
   group_by(site) %>% 
   summarise(n_samples_issue = n_distinct(ring))
 
@@ -469,8 +980,8 @@ confirmed_queens_A <-
   caps_ %>% 
   filter(queens == "Y" & edta == "N" & age != "J") %>% # & observer != "LEH" & observer != "PS" & observer != "HP" & observer != "BK") %>% 
   arrange(date) %>% 
-  mutate(site = ifelse(site %in% c("KP", "PB", "MS"), "MS", 
-                       ifelse(site %in% c("OM", "PR"), "OM", site))) %>% 
+  # mutate(site = ifelse(site %in% c("KP", "PB", "MS"), "MS", 
+  #                      ifelse(site %in% c("OM", "PR"), "OM", site))) %>% 
   group_by(site) %>% 
   summarise(n_queens_samples = n_distinct(ring))
 
@@ -478,8 +989,8 @@ confirmed_edta_A <-
   caps_ %>% 
   filter(queens == "N" & edta == "Y" & age != "J") %>% # & observer != "LEH" & observer != "PS" & observer != "HP" & observer != "BK") %>% 
   arrange(date) %>% 
-  mutate(site = ifelse(site %in% c("KP", "PB", "MS"), "MS", 
-                       ifelse(site %in% c("OM", "PR"), "OM", site))) %>% 
+  # mutate(site = ifelse(site %in% c("KP", "PB", "MS"), "MS", 
+  #                      ifelse(site %in% c("OM", "PR"), "OM", site))) %>% 
   group_by(site) %>% 
   summarise(n_edta_samples = n_distinct(ring))
 
@@ -489,19 +1000,22 @@ blood_sample_summary_A <-
   mutate(total = sum(n_queens_samples, n_edta_samples, na.rm = TRUE)) %>% 
   
   # rename the site codes for better interpretation
-  mutate(population = ifelse(site == "KT", "Kaitorete", 
-                             ifelse(site == "PB", "Porters_Beach",
-                                    ifelse(site == "KP", "Kena_Peninsula",
-                                           ifelse(site == "MS", "Motueka_Spit",
-                                                  ifelse(site == "KK", "Kaikoura",
-                                                         ifelse(site == "TS", "Tasman_Valley", 
-                                                                ifelse(site == "CR", "Cass_River",
-                                                                       ifelse(site == "TA", "Te_Anau",
-                                                                              ifelse(site == "TP", "Tiwai_Point", 
-                                                                                     ifelse(site == "CH", "Chathams", 
-                                                                                            ifelse(site == "HC", "Hawkes_Bay_coast", 
-                                                                                                   ifelse(site == "TO", "Tongirio", 
-                                                                                                          ifelse(site %in% c("OM", "PR"), "Old Man and Pisa Ranges", NA))))))))))))))%>% 
+  mutate(population = recode(site, 
+                             "KT" = "Kaitorete", 
+                             "PB" = "Porters_Beach",
+                             "KP" = "Kena_Peninsula",
+                             "MS" = "Motueka_Spit",
+                             "KK" = "Kaikoura",
+                             "TS" = "Tasman_Valley",
+                             "CR" = "Cass_River",
+                             "TA" = "Te_Anau",
+                             "TP" = "Tiwai_Point",
+                             "CH" = "Chathams",
+                             "HC" = "Hawkes_Bay_coast",
+                             "TO" = "Tongariro",
+                             "OM" = "Old_Man_Range",
+                             "PR" = "Pisa_Range",
+                             .default = as.character(NA))) %>% 
   mutate(n_filter_samples = NA)
 
 blood_sample_summary_A %>% 
@@ -544,19 +1058,22 @@ blood_sample_summary_J <-
   mutate(total = sum(n_queens_samples, n_filter_samples, na.rm = TRUE)) %>% 
   
   # rename the site codes for better interpretation
-  mutate(population = ifelse(site == "KT", "Kaitorete", 
-                             ifelse(site == "PB", "Porters_Beach",
-                                    ifelse(site == "KP", "Kena_Peninsula",
-                                           ifelse(site == "MS", "Motueka_Spit",
-                                                  ifelse(site == "KK", "Kaikoura",
-                                                         ifelse(site == "TS", "Tasman_Valley", 
-                                                                ifelse(site == "CR", "Cass_River",
-                                                                       ifelse(site == "TA", "Te_Anau",
-                                                                              ifelse(site == "TP", "Tiwai_Point", 
-                                                                                     ifelse(site == "CH", "Chathams", 
-                                                                                            ifelse(site == "HC", "Hawkes_Bay_coast", 
-                                                                                                   ifelse(site == "TO", "Tongirio", 
-                                                                                                          ifelse(site %in% c("OM", "PR"), "Old Man and Pisa Ranges", NA)))))))))))))) %>% 
+  mutate(population = recode(site, 
+                             "KT" = "Kaitorete", 
+                             "PB" = "Porters_Beach",
+                             "KP" = "Kena_Peninsula",
+                             "MS" = "Motueka_Spit",
+                             "KK" = "Kaikoura",
+                             "TS" = "Tasman_Valley",
+                             "CR" = "Cass_River",
+                             "TA" = "Te_Anau",
+                             "TP" = "Tiwai_Point",
+                             "CH" = "Chathams",
+                             "HC" = "Hawkes_Bay_coast",
+                             "TO" = "Tongariro",
+                             "OM" = "Old_Man_Range",
+                             "PR" = "Pisa_Range",
+                             .default = as.character(NA))) %>% 
   mutate(n_edta_samples = NA)
 
 blood_sample_summary_all <- 
@@ -601,63 +1118,689 @@ confirmed_feathers %>%
   ungroup() %>% 
   summarise(n_feather_samples = sum(n_feather_samples, na.rm = TRUE))
 
-caps_ %>% 
-  select(-c(sample, tag_type)) %>% 
+tissues <- 
+  caps_ %>% 
+  select(-c(sample)) %>% 
   mutate(ring = ifelse(ring == "", "no_band_Flag_2K", ring),
          nest_id = ifelse(nest_id == "", NA, nest_id)) %>% 
   
   # rename the site codes for better interpretation
-  mutate(population = ifelse(site == "KT", "Kaitorete", 
-                             ifelse(site == "PB", "Porters_Beach",
-                                    ifelse(site == "KP", "Kena_Peninsula",
-                                           ifelse(site == "MS", "Motueka_Spit",
-                                                  ifelse(site == "KK", "Kaikoura",
-                                                         ifelse(site == "TS", "Tasman_Valley", 
-                                                                ifelse(site == "CR", "Cass_River",
-                                                                       ifelse(site == "TA", "Te_Anau",
-                                                                              ifelse(site == "TP", "Tiwai_Point", 
-                                                                                     ifelse(site == "CH", "Chathams", 
-                                                                                            ifelse(site == "HC", "Hawkes_Bay_coast", 
-                                                                                                   ifelse(site == "TO", "Tongirio", 
-                                                                                                          ifelse(site %in% c("OM", "PR"), "Old Man and Pisa Ranges", NA)))))))))))))) %>% 
-  select(14,1:8,13,9:12) %>% 
-  write.xlsx(.,
-             file = here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/tissue_samples_banded_dotterel_2024_breeding_season.xlsx"), 
-             sheetName = "Sheet1", 
-             rowNames = FALSE)
+  mutate(population = recode(site, 
+                             "KT" = "Kaitorete", 
+                             "PB" = "Porters_Beach",
+                             "KP" = "Kena_Peninsula",
+                             "MS" = "Motueka_Spit",
+                             "KK" = "Kaikoura",
+                             "TS" = "Tasman_Valley",
+                             "CR" = "Cass_River",
+                             "TA" = "Te_Anau",
+                             "TP" = "Tiwai_Point",
+                             "CH" = "Chathams",
+                             "HC" = "Hawkes_Bay_coast",
+                             "TO" = "Tongariro",
+                             "OM" = "Old_Man_Range",
+                             "PR" = "Pisa_Range",
+                             .default = as.character(NA))) %>% 
+  mutate(primary = ifelse(ring == "CP16614", "Y", 
+                          ifelse(ring == "CP19354", "N", primary)),
+         breast = ifelse(ring == "CP16614", "Y", 
+                          ifelse(ring == "CP19354", "N", breast)))
+
+
+feather_samples <- 
+  tissues %>%
+  filter(age == "A" & primary == "Y") %>% 
+  group_by(population) %>% 
+  summarise(n_feather_samples = n_distinct(ring))
+
+tissue_samples <- 
+  tissues %>%
+  filter(filter == "Y") %>% 
+  group_by(population) %>% 
+  summarise(n_filter_paper_samples = n_distinct(ring))
+
+tissues %>%
+  group_by(population) %>%
+  summarise(
+    queens_samples = sum(queens == "Y", na.rm = TRUE),
+    edta_samples = sum(edta == "Y", na.rm = TRUE),
+    primary_samples = sum(primary == "Y", na.rm = TRUE),
+    breast_samples = sum(breast == "Y", na.rm = TRUE)
+  ) %>% 
+  arrange(desc(queens_samples)) 
+
+tissues %>%
+  filter(age == "A") %>% 
+  group_by(population) %>%
+  summarise(
+    queens_samples = sum(queens == "Y", na.rm = TRUE),
+    edta_samples = sum(edta == "Y", na.rm = TRUE)) %>% 
+  arrange(desc(queens_samples)) %>% 
+  rowwise() %>% 
+  mutate(blood_totals = queens_samples + edta_samples)
+
+###
+# wrangle samples to send to AgResearch
+# CP19334 was dead recovered
+
+# 19 Chathams (all)
+# 19 Cass River (all)
+# 20 Hawke's Bay (leave 15 queens)
+# 20 Kaikoura (use 10 edta, leave 4 edta)
+# 20 Kaitorete (take 20 with PTTs, excluding CP16699)
+# 20 Motueka Spit (take 13 from Motueka, 6 from Kena Peninsula, and 1 from Porters Beach)
+# 20 Old Man Range (all)
+# 7 Te Anau (all)
+# 20 Tongariro (all)
+# 20 Tiwai Point (take 20 with PTTs)
+# 20 Tasman Valley (take 20 with PTTs, excluding the 4 used for reference genome CP19315, CP19314, CP19312, CP19311)
+
+# all samples from the following sites that had < 20 samples
+CH_CR_TA_TO_PR_samples <- 
+  tissues %>% 
+  filter(population %in% c("Chathams", "Cass_River", "Te_Anau", "Tongariro", "Pisa_Range", "Old_Man_Range") & age == "A" & (queens == "Y" | edta == "Y")) %>% 
+  mutate(AgResearch = "Y")
+
+# all Kaikoura Queen's samples
+KK_q_samples <- 
+  tissues %>% 
+  filter(population == "Kaikoura" & age == "A" & queens == "Y") %>% 
+  mutate(AgResearch = "Y")
+
+# 5 random Kaikoura EDTA samples of Females
+KK_e_F_samples <- 
+  tissues %>% 
+  filter(population == "Kaikoura" & age == "A" & edta == "Y" & field_sex == "F") %>% 
+  mutate(AgResearch = "Y") %>% 
+  slice_sample(n = 5)
+
+# 5 random Kaikoura EDTA samples of Males
+KK_e_M_samples <- 
+  tissues %>% 
+  filter(population == "Kaikoura" & age == "A" & edta == "Y" & field_sex == "M") %>% 
+  mutate(AgResearch = "Y") %>% 
+  slice_sample(n = 5)
+
+KK_samples <- 
+  bind_rows(KK_e_F_samples, KK_e_M_samples, KK_q_samples)
+
+# 10 random Hawke's Bay Queen's samples of Males
+HC_e_M_samples <- 
+  tissues %>% 
+  filter(population == "Hawkes_Bay_coast" & age == "A" & queens == "Y" & field_sex == "M" & !is.na(nest_id)) %>% 
+  mutate(AgResearch = "Y") %>% 
+  slice_sample(n = 10)
+
+# 10 random Hawke's Bay Queen's samples of Females
+HC_e_F_samples <- 
+  tissues %>% 
+  filter(population == "Hawkes_Bay_coast" & age == "A" & queens == "Y" & field_sex == "F" & !is.na(nest_id)) %>% 
+  mutate(AgResearch = "Y") %>% 
+  slice_sample(n = 10)
+
+HC_samples <- 
+  bind_rows(HC_e_M_samples, HC_e_F_samples)
+
+# 20 PTT tagged Tasman Valley samples (excluding the 4 for the Reference Genome)
+TS_PTT_samples <-
+  tissues %>% 
+  filter(ring != "CP19315" & ring != "CP19314" & ring != "CP19312" & ring != "CP19311") %>% 
+  filter(population == "Tasman_Valley" & age == "A" & tag_type == "PTT") %>% 
+  mutate(AgResearch = "Y") %>%
+  group_by(field_sex) %>% 
+  slice_sample(n = 10)
+
+# dbq(con, "SELECT * FROM CAPTURES") %>% 
+#   filter(ring %in% c("CP16654", "CP16657", "CP16306", "CP19339"))
+
+# 20 PTT tagged Tiwai Point samples
+TP_PTT_samples <- 
+  tissues %>% 
+  filter(population == "Tiwai_Point" & age == "A" & tag_type == "PTT") %>% 
+  mutate(AgResearch = "Y") %>%
+  group_by(field_sex) %>% 
+  slice_sample(n = 11)
+
+# 266437, 266453, 266452, 266406
+# F, M, M, M
+
+# 20 PTT tagged Tiwai Point samples
+MS_PTT_samples <- 
+  tissues %>% 
+  filter(population == "Motueka_Spit" & age == "A" & tag_type == "PTT") %>% 
+  mutate(AgResearch = "Y")
+
+KP_PTT_samples <- 
+  tissues %>% 
+  filter(population == "Kena_Peninsula" & age == "A" & tag_type == "PTT") %>% 
+  mutate(AgResearch = "Y")
+
+PB_PTT_samples <- 
+  tissues %>% 
+  filter(population == "Porters_Beach" & age == "A" & tag_type == "PTT") %>% 
+  mutate(AgResearch = "Y") %>% 
+  filter(field_sex == "F") %>% 
+  slice_sample(n = 1)
+
+MS_samples <- 
+  bind_rows(MS_PTT_samples, KP_PTT_samples, PB_PTT_samples)
+
+KT_PTT_samples <- 
+  tissues %>% 
+  filter(population == "Kaitorete" & age == "A" & tag_type == "PTT") %>% 
+  mutate(AgResearch = "Y") %>%
+  filter(!is.na(field_sex) & !is.na(nest_id)) %>% 
+  group_by(field_sex) %>% 
+  slice_sample(n = 10) %>% as.data.table()
+
+AgResearch_samples <- 
+  bind_rows(KT_PTT_samples, 
+            MS_samples, 
+            KK_samples, 
+            TS_PTT_samples, 
+            CH_CR_TA_TO_PR_samples, 
+            TP_PTT_samples, 
+            HC_samples) %>% 
+  full_join(., tissues) %>% 
+  mutate(AgResearch = ifelse(is.na(AgResearch), "N", AgResearch)) #%>% 
+  # mutate(AgResearch_ = ifelse(ring %in% c("CP17009", "CP16654", "CP16657", "CP16306", "CP19339"), "Y", NA))
+
+AgResearch_samples <- 
+  read.xlsx("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/tissue_samples_banded_dotterel_2024_breeding_season_AgReseach.xlsx", sheet = 1)
+
+AgResearch_samples %>% 
+  filter(AgResearch == "N") %>%
+  filter(age == "A") %>% 
+  filter(population == "Kaitorete") %>% 
+  # filter(population %in% c("Kaitorete", "Tiwai_Point", "Tasman_Valley", "Motueka_Spit", "Porters_Beach", "Kena_Peninsula")) %>% 
+  # filter(edta == "Y") %>% 
+  group_by(field_sex) %>% 
+  summarise(n_ = n_distinct(ring))
+
+AgResearch_samples %>% 
+  filter(AgResearch == "N") %>%
+  filter(age == "A") %>% 
+  filter(site == "PB") #%>% 
+  # filter(!is.na(nest_id)) %>% filter(tag_type == "PTT")
+```
+
+```{r, eval=FALSE}
+write.xlsx(AgResearch_samples,
+           file = 
+             "/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/tissue_samples_banded_dotterel_2024_breeding_season_AgReseach.xlsx", 
+           sheetName = "Sheet1", 
+           rowNames = FALSE)
+```
+
+### import and check Argos data
+
+```{r}
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
+bdot_2024_PTTs_B <-
+  dbq(con, q = "SELECT * FROM ARGOS2.sensors") %>% 
+  filter(platformId %in% c(dbq(con, "SELECT * FROM CAPTURES") %>% pull(tag_id) %>% unique())) %>%
+  pivot_wider(
+    names_from = sensor_info, 
+    values_from = sensor_value
+  ) %>% 
+  rename(locationDate = timestamp,
+         tagID = platformId) %>% 
+  right_join(dbq(q = "SELECT * FROM ARGOS2.2024_BADO"), ., by = c("tagID", "locationDate")) %>% dplyr::select(-c(sensor_id, pk)) %>%
+  group_by(tagID, locationDate, bestMsgDate, latitude, longitude, 
+           locationClass, errorRadius, semiMajor, semiMinor, orientation) %>%
+  summarise(across(starts_with("SENSOR"), ~ max(.x, na.rm = TRUE)), .groups = "drop") %>% 
+  mutate(temp = ifelse(is.infinite(`SENSOR #1`), NA, (0.474 * `SENSOR #1`) - 35.662),
+         volt = ifelse(is.infinite(`SENSOR #2`), NA, (0.0079 * `SENSOR #2`) + 2.4129),
+         acc = `SENSOR #4`)# %>%
+```
+
+```{r}
+bdot_2024_PTTs_A <- 
+  bind_rows(read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_57_56.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_58_31.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_59_05.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_59_42.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_00_15.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_00_47.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_01_20.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_01_43.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_02_10.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_02_34.csv", stringsAsFactors = FALSE)) %>% 
+  mutate(temp = (0.474 * SENSOR.01) - 35.662,
+         volt = (0.0079 * SENSOR.02) + 2.4129,
+         acc = SENSOR.04) %>% 
+  dplyr::select(Platform.ID.No., Loc..date, Msg.Date, Latitude, Longitude, Loc..quality, Error.radius, Semi.major.axis, Semi.minor.axis, Ellipse.orientation, SENSOR.01, SENSOR.02, SENSOR.03, SENSOR.04, SENSOR.05, SENSOR.06, SENSOR.07, SENSOR.08, temp, volt, acc) %>% 
+  rename_with(~ colnames(bdot_2024_PTTs_B)) %>% 
+  mutate(locationDate = as.POSIXct(locationDate, tz = "Europe/Berlin"),
+         bestMsgDate = as.POSIXct(bestMsgDate, tz = "Europe/Berlin"))
+```
+
+```{r}
+bdot_2024_PTTs <- 
+  bind_rows(bdot_2024_PTTs_A, bdot_2024_PTTs_B) %>% 
+  mutate(date_local = with_tz(locationDate, 'Pacific/Auckland')) %>%
+  mutate(tagID = as.character(tagID)) %>%
+  full_join(., tissues %>% rename(tagID = tag_id) %>% dplyr::select(tagID, ring, date, field_sex, population, queens, edta, primary, breast), by = "tagID") %>% 
+  mutate(remove = ifelse(tagID == "266470" & ring == "CP19334" & date_local > as.POSIXct("2024-10-12 19:15:00", tz = 'Pacific/Auckland'), "1", 
+                         ifelse(tagID == "266470" & ring == "CP16667" & date_local < as.POSIXct("2024-12-09 17:38:00", tz = 'Pacific/Auckland'), "1", 
+                                ifelse(as.Date(date_local) <= date, "1", "0")))) %>% 
+  filter(remove == "0") %>% 
+  mutate(tagID = ifelse(tagID == "266470" & ring == "CP19334", "266470_A", 
+                         ifelse(tagID == "266470" & ring == "CP16667", "266470_B", tagID)))
+```
+
+```{r}
+bdot_2024_PTTs_daily_fix_rate <- 
+  bdot_2024_PTTs %>% 
+  mutate(date = as.Date(date_local)) %>% 
+  group_by(ring, tagID, date, field_sex, population, queens, edta, primary, breast) %>% 
+  mutate(lag_acc = lag(acc) - acc) %>%
+  summarise(n_fixes = n(),
+            mean_temp = mean(temp, na.rm = TRUE),
+            mean_lag_acc = mean(lag_acc, na.rm = TRUE),
+            n_acc_values = n_distinct(as.character(acc)),
+            mean_voltage = mean(volt, na.rm = TRUE),
+            max_acc = max(acc, na.rm = TRUE))
+```
+
+### movements of 5 samples sent to AGRF for long-read seq
+
+```{r}
+### Tasman Valley ----
+points_bdot_AGRF_TS <-
+  bdot_2024_PTTs %>% 
+  filter(ring %in% c("CP19315", "CP19314", "CP19312", "CP19311")) %>%
+  filter(!is.na(longitude)) %>% 
+  filter(latitude < 0 & latitude > -48) %>% 
+  filter(locationClass %in% c(1, 2, 3)) %>% 
+  dplyr::select(ring, tagID, latitude, longitude, date_local) %>% 
+  distinct() %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+lines_bdot_AGRF_TS <- 
+  points_bdot_AGRF_TS  %>% 
+  group_by(ring, tagID) %>%
+  arrange(date_local) %>% 
+  summarise(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+
+mapview(points_bdot_AGRF_TS, zcol = "tagID") + 
+  mapview(lines_bdot_AGRF_TS, zcol = "tagID", lwd = 2)
+
+### Kaitorete Spit ----
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
+dbq(con, "SELECT * FROM CAPTURES") %>% 
+  left_join(., dbq(con, "SELECT * FROM GPS_POINTS"), by = c("gps_id", "gps_point")) %>% 
+  left_join(., tissues %>% select(ring, queens, edta, primary, breast, filter, population), by = c("ring")) %>% 
+  filter(edta == "Y" & site == "KT" & tag_type == "PTT" & field_sex == "F") %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>% 
+  mapview(zcol = "ring")
+  
+points_bdot_AGRF_KT <-
+  bdot_2024_PTTs %>% 
+  # filter(ring %in% (AgResearch_samples %>% 
+  #                     filter(edta == "Y" & AgResearch == "N" & site == "KT" & tag_type == "PTT") %>% 
+  #                     pull(ring))) %>%
+  filter(ring %in% c("CP19350", "CP16693", "CP16736")) %>% 
+  filter(!is.na(longitude)) %>% 
+  filter(latitude < 0 & latitude > -48) %>% 
+  filter(locationClass %in% c(1, 2, 3)) %>% 
+  dplyr::select(ring, tagID, latitude, longitude, date_local) %>% 
+  distinct() %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+lines_bdot_AGRF_KT <- 
+  points_bdot_AGRF_KT  %>% 
+  group_by(ring) %>%
+  arrange(date_local) %>% 
+  summarise(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+
+mapview(points_bdot_AGRF_KT, zcol = "ring") + 
+  mapview(lines_bdot_AGRF_KT, zcol = "ring", lwd = 2)
+
+ggplot(data = bdot_2024_PTTs_daily_fix_rate %>% 
+         filter(ring %in% c("CP19304", "CP16693", "CP16736"))) +
+  geom_point(aes(x = date, y = n_fixes, color = population), alpha = 0.5) +
+  theme_minimal() +
+  facet_wrap(population + ring ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  geom_vline(xintercept = as.Date("2025-01-01"), color = "black") +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("daily number of PTT transmissons")
+
+### Tasman Bay ----
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
+dbq(con, "SELECT * FROM CAPTURES") %>% 
+  left_join(., dbq(con, "SELECT * FROM GPS_POINTS"), by = c("gps_id", "gps_point")) %>% 
+  left_join(., tissues %>% select(ring, queens, edta, primary, breast, filter, population), by = c("ring")) %>% 
+  filter(edta == "Y" & site %in% c("KP") & tag_type == "PTT") %>% 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>% 
+  mapview(zcol = "ring")
+
+points_bdot_AGRF_KP <-
+  bdot_2024_PTTs %>% 
+  filter(ring %in% c("CP19333", "CP19331", "CP19320")) %>%
+  # filter(ring %in% (AgResearch_samples %>% filter(edta == "Y" & AgResearch == "N" & site %in% c("PB", "KP", "MS") & tag_type == "PTT") %>% pull(ring))) %>%
+  filter(!is.na(longitude)) %>% 
+  filter(latitude < 0 & latitude > -48) %>% 
+  filter(locationClass %in% c(1, 2, 3)) %>% 
+  dplyr::select(ring, tagID, latitude, longitude, date_local) %>% 
+  distinct() %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+lines_bdot_AGRF_KP <- 
+  points_bdot_AGRF_KP  %>% 
+  group_by(ring) %>%
+  arrange(date_local) %>% 
+  summarise(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+
+mapview(points_bdot_AGRF_KP, zcol = "ring") + 
+  mapview(lines_bdot_AGRF_KP, zcol = "ring", lwd = 2)
+
+
+### Tiwai Point ----
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
+dbq(con, "SELECT * FROM CAPTURES") %>% 
+  left_join(., dbq(con, "SELECT * FROM GPS_POINTS"), by = c("gps_id", "gps_point")) %>% 
+  left_join(., tissues %>% select(ring, queens, edta, primary, breast, filter, population), by = c("ring")) %>% 
+  filter(edta == "Y" & site %in% c("TP") & tag_type == "PTT") %>% 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>% 
+  mapview(zcol = "field_sex")
+
+points_bdot_AGRF_TP <-
+  bdot_2024_PTTs %>% 
+  filter(ring %in% c("CP17009", "CP16784", "CP16663", "CP19919")) %>% 
+  # filter(ring %in% (AgResearch_samples %>% filter(edta == "Y" & AgResearch == "N" & site %in% c("TP") & tag_type == "PTT") %>% pull(ring))) %>%
+  filter(!is.na(longitude)) %>% 
+  filter(latitude < 0 & latitude > -48) %>% 
+  filter(locationClass %in% c(1, 2, 3)) %>% 
+  dplyr::select(ring, tagID, latitude, longitude, date_local) %>% 
+  distinct() %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+lines_bdot_AGRF_TP <- 
+  points_bdot_AGRF_TP  %>% 
+  group_by(ring) %>%
+  arrange(date_local) %>% 
+  summarise(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+
+mapview(points_bdot_AGRF_TP, zcol = "ring") + 
+  mapview(lines_bdot_AGRF_TP, zcol = "ring", lwd = 2)
+
+
+ggplot(data = bdot_2024_PTTs %>% 
+         filter(tagID %in% c("266448", "266379", "266382", "266393")) %>% 
+         group_by(tagID) %>% slice_tail(n = 150)) +
+  geom_point(aes(x = date_local, y = acc, colour = population), alpha = 0.5) +
+  # geom_line(aes(x = locationDate, y = `SENSOR #4`)) +
+  # facet_grid(id ~ .) +
+  # scale_color_gradientn(
+  #   colors = c("blue", "white", "white", "red"),
+  #   values = rescale(c(1, 20, 40, 50))  # Ensures blue starts around 30
+  # ) +
+  theme_minimal() +
+  facet_wrap(population + tagID ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  geom_vline(xintercept = as.POSIXct("2025-01-01"), color = "black") +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("activity sensor (6 Bit counter ranging from 0 to 63)")
+
+saveRDS(bdot_2024_PTTs, "/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/bdot_2024_PTTs.rds")
+
+ggplot(data = bdot_2024_PTTs %>% 
+         filter(tagID %in% c("266448", "266379", "266382", "266393")) %>% 
+         group_by(tagID) %>% slice_tail(n = 150)) +
+  geom_point(aes(x = date_local, y = temp, colour = population), alpha = 0.5) +
+  geom_smooth(method = "loess", aes(x = date_local, y = temp, colour = population)) +
+  # geom_line(aes(x = locationDate, y = `SENSOR #4`)) +
+  # facet_grid(id ~ .) +
+  # scale_color_gradientn(
+  #   colors = c("blue", "white", "white", "red"),
+  #   values = rescale(c(1, 20, 40, 50))  # Ensures blue starts around 30
+  # ) +
+  theme_minimal() +
+  facet_wrap(population + tagID ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  geom_vline(xintercept = as.POSIXct("2025-01-01"), color = "black") +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("tag temperature (°C)")
+
+ggplot(data = bdot_2024_PTTs_daily_fix_rate %>% 
+         filter(tagID %in% c("266448", "266379", "266382", "266393")) %>% 
+         group_by(tagID) %>% slice_tail(n = 150)) +
+  geom_point(aes(x = date, y = n_fixes, color = population), alpha = 0.5) +
+  geom_smooth(method = "loess", aes(x = date, y = n_fixes, colour = population)) +
+  # geom_line(aes(x = locationDate, y = `SENSOR #4`)) +
+  # facet_grid(id ~ .) +
+  # scale_color_gradientn(
+  #   colors = c("blue", "white", "white", "red"),
+  #   values = rescale(c(1, 20, 40, 50))  # Ensures blue starts around 30
+  # ) +
+  theme_minimal() +
+  facet_wrap(population + tagID ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  geom_vline(xintercept = as.Date("2025-01-01"), color = "black") +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("daily number of PTT transmissons")
+
+library(zoo)
+
+bdot_2024_PTTs %>% 
+  select(tagID, ring, field_sex, population, date_local, latitude, longitude, temp, volt, acc) %>%
+  arrange(ring, date_local) %>%
+  # slice_tail(n = days(5))
+  group_by(tagID, population, field_sex, ring) %>%
+  mutate(avg_temp_last5 = rollapply(temp, width = 10, FUN = mean, fill = NA, align = "right", na.rm = TRUE)) %>%
+  summarise(min_date = min(date_local), 
+            max_date = max(date_local),
+            avg_temp_last10 = avg_temp_last5[which.max(date_local)]) %>% 
+  mutate(deploy_time = max_date - min_date) %>% arrange(deploy_time) %>% View()
+
+bdot_2024_PTTs %>% 
+  filter(ring %in% c("CP19304", "CP19920", "CP16815", "CP16642", "CP19331", "CP19363", "CP19362", "CP16662", "CP19320", "CP19330")) %>% 
+  filter(!is.na(longitude)) %>% 
+  filter(latitude < 0) %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
+  mapview(zcol = "ring")
+
+bdot_2024_PTTs %>% 
+  group_by(ring) %>% 
+  filter(!is.na(longitude)) %>% 
+  summarise(n_ = n()) %>% 
+  arrange(desc(n_)) %>% 
+  slice(1:10) %>% 
+  pull(ring) %>% paste(collapse = "', '")
+
+bdot_2024_PTTs %>% 
+  group_by(tagID) %>% 
+  slice_max(order_by = date_local) %>% 
+  group_by(population, field_sex) %>%
+  summarise(n_ = n(),
+            min_date = min(date_local)) %>% 
+  ungroup() %>% 
+  summarise(sum(n_))
+# tissues_AgResearch <-
+  tissues %>% 
+  filter(ring != "CP19315" & ring != "CP19314" & ring != "CP19312" & ring != "CP19311") %>% #filter(age == "A") %>% 
+  mutate(AgResearch = ifelse(population %in% c("Chathams", "Cass_River", "Te_Anau", "Tongariro", "Pisa_Range") & age == "A", "Y", 
+                             ifelse(population %in% c("Kaikoura") & age == "A" & queens == "Y", "Y", 
+                                    ifelse(population == "Old_Man_Range" & age == "A" & queens == "Y" & field_sex == "F", "Y", "N")))) %>% 
+  mutate(AgResearch = ifelse(population == "Old_Man_Range" & age == "A" & queens == "Y" & field_sex == "M", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Old_Man_Range" & age == "A" & queens == "Y" & field_sex == "M"),
+                                     min(6, sum(population == "Old_Man_Range" & age == "A" & queens == "Y" & field_sex == "M"))),
+                              "Y")) %>% 
+  mutate(AgResearch = ifelse(population == "Tasman_Valley" & tag_type == "PTT", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Tasman_Valley" & tag_type == "PTT"), 20),
+                              "Y")) %>%
+  mutate(AgResearch = ifelse(population == "Kena_Peninsula" & edta == "Y" & field_sex %in% c("F", "M"), NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Kena_Peninsula" & edta == "Y" & field_sex %in% c("F", "M")),
+                                     min(4, sum(population == "Kena_Peninsula" & edta == "Y" & field_sex %in% c("F", "M")))),
+                              "Y")) %>%
+  mutate(AgResearch = ifelse(population == "Kaikoura" & edta == "Y" & field_sex == "F", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Kaikoura" & edta == "Y" & field_sex == "F"), 5),
+                              "Y")) %>%
+  mutate(AgResearch = ifelse(population == "Kaikoura" & edta == "Y" & field_sex == "M", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Kaikoura" & edta == "Y" & field_sex == "M"), 5),
+                              "Y")) %>%
+  mutate(AgResearch = ifelse(population == "Hawkes_Bay_coast" & queens == "Y" & field_sex == "F", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Hawkes_Bay_coast" & queens == "Y" & field_sex == "F"), 10),
+                              "Y")) %>%
+  mutate(AgResearch = ifelse(population == "Hawkes_Bay_coast" & queens == "Y" & field_sex == "M", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Hawkes_Bay_coast" & queens == "Y" & field_sex == "M"), 10),
+                              "Y")) %>%
+  mutate(AgResearch = ifelse(population == "Kaitorete" & queens == "Y" & field_sex == "F", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Kaitorete" & queens == "Y" & field_sex == "F"), 10),
+                              "Y")) %>%
+  mutate(AgResearch = ifelse(population == "Kaitorete" & queens == "Y" & field_sex == "M", NA, AgResearch)) %>%  # Create column with NA
+  mutate(AgResearch = replace(AgResearch,
+                              sample(which(population == "Kaitorete" & queens == "Y" & field_sex == "M"), 10),
+                              "Y")) %>%
+    group_by(field_sex, population, AgResearch) %>% 
+    summarise(n_ = n()) %>% 
+    filter(AgResearch == "Y") %>% arrange(population) %>% ungroup() %>% View()#%>% summarise(sum(n_))
 
 ```
 
+```{r, eval=FALSE}
+write.xlsx(tissues,
+           file = 
+             here("data/tissue_samples_banded_dotterel_2024_breeding_season_AgReseach.xlsx"), 
+           sheetName = "AgResearch", 
+           rowNames = FALSE)
+```
+
+### double-check Sylvia's delivery to AgResearch (28-March-2025)
+
+```{r, eval=FALSE}
+agresearch_delivery <- 
+  read_xlsx(path = "/Users/leberhart/ownCloud/kemp_projects/bdot/genomics/samples_sent_to_AgResearch_28Mar25.xlsx",
+            col_types = "text",
+            sheet = 2) %>% 
+  mutate(agresearch_ = "Y") %>% 
+  rename(population = population...2,
+         ring = ring...3)
+
+sylvia_sample_sheet <- 
+  read_xlsx(path = "/Users/leberhart/ownCloud/NZ shared/BDot samples 2024.xlsx",
+            col_types = "text",
+            sheet = "LabList") %>% b 
+  rename(population = population...3,
+         ring = ring...4)
+
+sylvia_sample_sheet <- 
+  read_xlsx(path = "/Users/leberhart/ownCloud/NZ shared/BDot samples 2024.xlsx",
+            col_types = "text",
+            sheet = "LabList") %>% 
+  rename(population = population...3,
+         ring = ring...4)
+
+sylvia_sample_sheet %>% 
+  group_by(population) %>% 
+  summarise(n_ = n()) %>% 
+  View()
+
+agresearch_delivery %>% 
+  filter(ring %in% c("CP16699", "CP19314", "CP19315", "CP19311", 
+                     "CP19312", "CP16693", "CP19341", "CP19320", 
+                     "CP19321", "CP19323", "CP19331", "CP16784", 
+                     "CP17009", "CP19919", "CP16663", "CP16446", 
+                     "CP16736"))
+
+agresearch_delivery %>% 
+  filter(ring %in% c("CP16699", "CP19314", "CP19315", "CP19311", 
+                     "CP19312", "CP16693", "CP19341", "CP19320", 
+                     "CP19321", "CP19323", "CP19331", "CP16784", 
+                     "CP17009", "CP19919", "CP16663", "CP16446", 
+                     "CP16736"))
+
+# tagged birds that are planned to have PacBio Revio done at AGRF
+ggplot(data = bdot_2024_PTTs_daily_fix_rate %>% 
+         filter(ring %in% c("CP16699", "CP19314", "CP19315", "CP19311", 
+                            "CP19312", "CP16693", "CP19341", "CP19320", 
+                            "CP19321", "CP19323", "CP19331", "CP16784", 
+                            "CP17009", "CP19919", "CP16663", "CP16446", 
+                            "CP16736"))) +
+  geom_point(aes(x = date, y = n_fixes, color = population), alpha = 0.5) +
+  theme_minimal() +
+  facet_wrap(population + ring ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  geom_vline(xintercept = as.Date("2025-01-01"), color = "black") +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("daily number of PTT transmissons")
+
+# tagged birds that will have WGS done at AgResearch
+ggplot(data = bdot_2024_PTTs_daily_fix_rate %>% 
+         filter(tagID %in% unique(agresearch_delivery$tag_id))) +
+  geom_point(aes(x = date, y = n_fixes, color = population), alpha = 0.5) +
+  theme_minimal() +
+  facet_wrap(population + ring ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  geom_vline(xintercept = as.Date("2025-01-01"), color = "black") +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("daily number of PTT transmissons")
+```
 
 ## Manually entering a resighting record
+
 When resightings come into via email, social media posts, or FALCON, it is important to add them to the database. For these observations we will use the `RESIGHTINGS_PUBLIC` table.
-To access the database editor, go to [http://behavioural-ecology.orn.mpg.de/db_ui/field_db.php](http://behavioural-ecology.orn.mpg.de/db_ui/field_db.php), you should see the following screen where you can enter the credentials for the Banded Dotterel database (username: bdot, password: XXX).
 
 ```{r, echo=FALSE}
-knitr::include_graphics(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.21.05.png"))
+knitr::include_graphics(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.21.05.png"))
 ```
 
 Next select the `FIELD_2024_BADOatNZ` database
+
 ```{r, echo=FALSE}
-knitr::include_graphics(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.23.06.png"))
+knitr::include_graphics(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.23.06.png"))
 ```
 
 Next select the `RESIGHTINGS_PUBLIC` table
+
 ```{r, echo=FALSE}
-knitr::include_graphics(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.24.41.png"))
+knitr::include_graphics(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.24.41.png"))
 ```
 
 Next click `New item`
+
 ```{r, echo=FALSE}
-knitr::include_graphics(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.26.05.png"))
+knitr::include_graphics(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.26.05.png"))
 ```
 
 Now you can enter the resighting record, such as [this one](https://www.facebook.com/share/p/19vxsS3JPZ/?mibextid=wwXIfr) posted in the "New Zealand Bird Identification" Facebook group:
+
 ```{r, echo=FALSE}
-knitr::include_graphics(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.31.10.png"))
+knitr::include_graphics(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 14.31.10.png"))
 ```
 
 The location that these two birds were seen was "Motueka Estuary". We can use the `geocode()` function in the ggmap package to get the latitude and longitude for this location
+
 ```{r}
 location <- "Motueka Estuary, New Zealand"
 geo_result <- 
@@ -668,86 +1811,89 @@ as.data.frame(geo_result)
 ```
 
 Now you enter all the data you can glean from the Facebook post, and click "Save" (or click "Save and insert next" if you have another immediate resighting to enter).
+
 ```{r, echo=FALSE}
-knitr::include_graphics("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.25.12.png")
+knitr::include_graphics("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.25.12.png")
 ```
 
-Note that I've downloaded the original photo from Facebook, renamed it as "2025-02-04_MA_Motueka.jpg", and put it in the following OwnCloud directory: [https://owncloud.gwdg.de/index.php/s/nc0v301s0OUyVMR](https://owncloud.gwdg.de/index.php/s/nc0v301s0OUyVMR) This is where any photos from a resighting can be stored.
+Note that I've downloaded the original photo from Facebook, renamed it as "2025-02-04_MA_Motueka.jpg", and put it in the following OwnCloud directory: <https://owncloud.gwdg.de/index.php/s/nc0v301s0OUyVMR> This is where any photos from a resighting can be stored.
 
 Note also that the text inserted in the `comments_db` is: "from New Zealand Bird Identification Facebook group; reported with FWM2". I've specified here the exact source within Facebook and I've also made note that another bird was seen with it. `comments_db` is essentially a dedicated space for the database manager to make a relevent comment about the resighting.
 
 ## Editing a resighting observation
-If you need to correct an observation, you can click "Select data" in the `Table: RESIGHTINGS_PUBLIC` page
+
+To access the database editor, go to <http://behavioural-ecology.orn.mpg.de/db_ui/field_db.php>, you should see the following screen where you can enter the credentials for the Banded Dotterel database (username: bdot, password: XXX). If you need to correct an observation, you can click "Select data" in the `Table: RESIGHTINGS_PUBLIC` page
+
 ```{r, echo=FALSE}
-knitr::include_graphics("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.44.42.png")
+knitr::include_graphics("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.44.42.png")
 ```
 
-then click "edit" on the observation you'd like to modify.
+then click "edit" on the observation you'd like to modify, then select "Save".
+
 ```{r, echo=FALSE}
-knitr::include_graphics("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.42.40.png")
+knitr::include_graphics("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/media/Screenshot 2025-02-05 at 20.42.40.png")
 ```
 
-## Basic data checks
-Here I provide a few basic data checks for cleaning up entries in the database
+## Basic data checks of the FIELD database
+
+Here I provide a few basic data checks for cleaning up entries in the database First we need to connect to the database
+
 ```{r}
-# con = dbcon()
-# dbExecute(con, "USE FIELD_2024_BADOatNZ")
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
 BADO_capture_data <-
-  # dbq(con, "SELECT * FROM CAPTURES") %>%
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/CAPTURES_breeding_season_2024.csv"), colClasses = "character") %>% 
-  mutate(date = as.Date(date))
+  dbq(con, "SELECT * FROM CAPTURES")
 ```
 
 ### make sure that there is a metal on the somewhere on the bird (ideally either tiba)
+
+pull out observations with no metal and inspect comments:
+
 ```{r}
 BADO_capture_data %>%
-  mutate(M_check = rowSums(across(c(LL, UL, LR, UR), ~ . == "M")) == 1) %>%
+  mutate(M_check = rowSums(across(c(LL, UL, LR, UR), ~ . == "M"), na.rm = TRUE) == 1) %>%
   filter(M_check == FALSE)
 ### exception data ----
 # pk 23: no metal band recorded, and comment says "no metal band"
-# pk 24: no metal band recorded, Kim has varified that on this day they had no metal bands (first day of field work)
-
-### issue data ----
-# pk 291: ring is recorded as "CP17019" and the M is in the LR string as RBM. Need to check mugshot to confirm that the metal is on the right tarsus
-# pk 24: no ring recorded and no M in the leg positions. only "O" on LL. Need to ask "MV" about it. check the standardized photos to see if it can be seen.
+# pk 24: no metal band recorded, Kim has verified that on this day they had no metal bands (first day of field work)
 ```
 
-
 ### clean up the leg marking columns by removing erroneous white space(s)
+
 ```{r}
 BADO_capture_data %>% 
-  select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .)))
 ```
 
-
 ### replace all leg segments that have missing data with "X"
+
 ```{r}
 BADO_capture_data %>% 
-  select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .)))
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .)))
 ```
 
 ### make sure that all flag information has a "FW" in front to signify it is a flag:
+
 in the UR and UL column, add an "FW" to all strings that are not "X" or "M" or do not start with "FW"
+
 ```{r}
 BADO_capture_data %>% 
-  select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
   mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .))))
 ```
 
 ### check if there are flags with impossible codes on the tibias
+
 the only characters allowed on flags are A, C, E, H, J, K, L, M, N, P, T, U, V, X, Y, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0.
+
 ```{r}
 excluded_chars <- "[ACEHJKLMNPTUVXY1234567890]"
 
 BADO_capture_data %>% 
-  select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
   mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .)))) %>% 
   mutate(across(c(UL, UR), ~ gsub("^FW", "", .))) %>%  # Remove "FW"
   filter(!grepl(excluded_chars, UL) | !grepl(excluded_chars, UR))  # Subset rows
@@ -760,20 +1906,21 @@ BADO_capture_data %>%
 # pk 234: missing flag code, comment: "flag was not written in the book; based on the pic it could be7C", need to ask folks for their mug shots, will enter "7C" now, but this should be double-checked and verified by looking at a mugshot
 BADO_capture_data %>% 
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
   mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .)))) %>% 
   mutate(UR = ifelse(ring == "CP16657" & pk == 234, "FW7C", UR))
 ```
 
 ### check if there are impossible colour codes on the tarsi
+
 the only characters allowed for colors are: B, G, R, O, W, L, Y (and X for blank)
+
 ```{r}
 excluded_chars <- "[BGROWLYX]"
 
 BADO_capture_data %>% 
-  select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
   mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .)))) %>% 
   mutate(across(c(UL, UR), ~ gsub("^FW", "", .))) %>%  # Remove "FW"
   filter(!grepl(excluded_chars, LL) & !grepl(excluded_chars, LR))  # Subset rows
@@ -786,80 +1933,76 @@ BADO_capture_data %>%
 ```
 
 ### check if all capture methods are entered correctly
+
 the only option allowed are: HA = Hand, TB = clap-Trap on Brood, TN = clap-Trap on Nest, SM = Stationary Mistnet, MM = Mobile Mistnet, O = Other
 
 ```{r}
 BADO_capture_data %>% 
-  # select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
   mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .)))) %>% 
   pull(capture_method) %>% unique()
-
-BADO_capture_data %>% filter(is.na(capture_method) | capture_method == "") %>% select(ring, pk)
 
 ### exception data ----
 # all fine!
 
 ### issue data ----
-# pk40: ring "CP16692" has missing capture_method, but it is a chick, so must be "HA"
+# all fine!
 ```
 
 ### check if field_sex data are entered correctly
+
 the only option allowed are: U = unknown, M = male, F = female, MU = unsure, probably male; FU = unsure, probably female
 
 ```{r}
 BADO_capture_data %>% 
-  # select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
   mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .)))) %>% 
   pull(field_sex) %>% table()
 
 BADO_capture_data %>% filter(is.na(field_sex) | field_sex == "") %>% select(ring, pk, age)
 BADO_capture_data %>% filter(is.na(field_sex) | field_sex == "" & age == "A") %>% select(ring, pk, age)
-BADO_capture_data
+
 ### exception data ----
 # all fine!
 
 ### issue data ----
-# All but one capture that has missing field_sex data is a "J", so change these to "U".
+# all fine!
 ```
 
 ### check if age data are entered correctly
+
 the only option allowed are: P = pullus, J = juvenile, A = adult
 
 ```{r}
 BADO_capture_data %>% 
-  # select(UL, LL, UR, LR) %>%
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
   mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .)))) %>% 
   pull(age) %>% table()
 
 BADO_capture_data %>% filter(is.na(field_sex) | field_sex == "") %>% select(ring, pk, age)
 BADO_capture_data %>% filter(is.na(field_sex) | field_sex == "" & age == "A") %>% select(ring, pk, age)
-BADO_capture_data
 ### exception data ----
 # all fine!
 
 ### issue data ----
-# All but one capture that has missing field_sex data is a "J", so change these to "U".
+# all fine!
 ```
 
 ### check if all GPS points are uploaded into the database
+
 ```{r}
-# con = dbcon()
-# dbExecute(con, "USE FIELD_2024_BADOatNZ")
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
 
 BADO_GPS_points_data <-
-  # dbq(con, "SELECT * FROM GPS_POINTS") %>% 
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/GPS_POINTS_breeding_season_2024.csv"), colClasses = "character")
+  dbq(con, "SELECT * FROM GPS_POINTS")
 
 ### CAPTURES without gps_id and/or gps_point data ----
 CAPTURES_no_gps_data <- 
-# dbq(con, "SELECT * FROM CAPTURES") %>% 
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/CAPTURES_breeding_season_2024.csv"), colClasses = "character") %>% 
+  dbq(con, "SELECT * FROM CAPTURES") %>%
   left_join(., BADO_GPS_points_data, by = c("gps_id", "gps_point")) %>% 
   rename(CAPTURES_pk = pk.x) %>% 
   filter(is.na(lat) | is.na(lon)) %>% 
@@ -870,18 +2013,13 @@ CAPTURES_no_gps_data <-
 # try to salvage the missing data from the nest data associated with capture
 CAPTURES_no_gps_data %>% 
   filter(gps_point == "" | gps_id == "") %>% 
-  left_join(., read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/NESTS_breeding_season_2024.csv"), 
-                        colClasses = "character"), by = c("nest_id", "site")) %>% 
+  left_join(., dbq(con, "SELECT * FROM NESTS"), by = c("nest_id", "site")) %>% 
   select(CAPTURES_pk, book_id, form_id, gps_id.x, site, nest_id, 
          comments.x, comments.y, observer.x, observer.y, gps_point.x, 
-         gps_id.y, gps_point.y, date.x, date.y) #%>% 
-  # select(CAPTURES_pk, book_id, form_id, 
-  #        gps_id.x, gps_point.x, gps_id.y, gps_point.y, site, nest_id) %>% 
-  # filter(!is.na(gps_point.y) & gps_point.y != "") %>% mutate(gps_point.y = as.numeric(gps_point.y))
+         gps_id.y, gps_point.y, date.x, date.y)
   
 ### RESIGHTINGS without gps_id and/or gps_point data ----
-# dbq(con, "SELECT * FROM RESIGHTINGS") %>% 
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/RESIGHTINGS_breeding_season_2024.csv"), colClasses = "character") %>% 
+dbq(con, "SELECT * FROM RESIGHTINGS") %>%
   rename(gps_point = gps_point_start) %>% 
   left_join(., BADO_GPS_points_data, by = c("gps_id", "gps_point")) %>% 
   rename(RESIGHTINGS_pk = pk.x) %>% 
@@ -891,8 +2029,7 @@ CAPTURES_no_gps_data %>%
 
 ### NESTS without gps_id and/or gps_point data ----
 NESTS_no_gps_data <- 
-# dbq(con, "SELECT * FROM NESTS") %>% 
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/NESTS_breeding_season_2024.csv"), colClasses = "character") %>% 
+  dbq(con, "SELECT * FROM NESTS") %>%
   left_join(., BADO_GPS_points_data, by = c("gps_id", "gps_point")) %>% 
   rename(NESTS_pk = pk.x) %>% 
   filter(is.na(lat) | is.na(lon)) %>% 
@@ -904,21 +2041,18 @@ NESTS_no_gps_data <-
 NESTS_no_gps_data %>% 
   filter(gps_point == "" | gps_id == "") %>% 
   arrange(as.Date(date)) %>% 
-  left_join(., read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/CAPTURES_breeding_season_2024.csv"), 
-                        colClasses = "character") %>% 
+  left_join(., dbq(con, "SELECT * FROM CAPTURES") %>% 
               filter(gps_point != "" | gps_id != "") %>% 
               arrange(as.Date(date)), 
             by = c("nest_id", "site"), multiple = "first") %>% 
   select(NESTS_pk, gps_id.x, site, nest_id,
          comments.x, comments.y, observer.x, observer.y, gps_point.x,
          gps_id.y, gps_point.y, date.x, date.y)
-  # select(NESTS_pk, gps_id.x, gps_point.x, gps_id.y, gps_point.y, site, nest_id, observer.x, date.x, date.y) %>% 
-  # filter(!is.na(gps_point.y) & gps_point.y != "") %>% mutate(gps_point.y = as.numeric(gps_point.y))
 
 # if gps_point and/gps_id was not written on nest sheet in the field, we can
 # try to salvage the data from the first gps_point associated with the nest (if entered)
 nest_id_coords <- 
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/NESTS_breeding_season_2024.csv"), colClasses = "character") %>% 
+  dbq(con, "SELECT * FROM NESTS") %>% 
   left_join(., BADO_GPS_points_data, by = c("gps_id", "gps_point")) %>% 
   rename(NESTS_pk = pk.x) %>% 
   filter(!is.na(lat) | !is.na(lon)) %>% 
@@ -933,34 +2067,36 @@ NESTS_no_gps_data %>%
   filter(gps_point == "" | gps_id == "") %>% 
   arrange(as.Date(date)) %>% 
   left_join(., nest_id_coords, by = "nest_id") %>% mutate(gps_point.y = as.numeric(gps_point.y))
-
 ```
 
 ## Preparing data for FALCON upload
 
-An efficient way to upload the FIELD_2024_BADOatNZ data into FALCON is to download the latest FALCON spreadsheet template (as of 11-Feb-2025, this was [Data BOX v.FALCON.1x](https://www.doc.govt.nz/globalassets/documents/our-work/bird-banding/nznbbs-data-spreadsheet.xlsx) and then use the following code to wrangle the FIELD_2024_BADOatNZ data into the FALCON format and compile it into the FALCON spreadsheet. Once the spreadsheet is ready, you can upload it to FALCON via the [Upload Spreadsheet](https://app.birdbanding.doc.govt.nz/data-uploads/upload-spreadsheet) site (see detailed instructions on the "Data BOX submission process" within the Upload Spreadsheet site), which will do some data checks before accepting it. If you have any issues with the upload, get in touch with the NZ Banding Office (bandingoffice@doc.govt.nz) and they can help troubleshoot the upload for you.
+An efficient way to upload the FIELD_2024_BADOatNZ data into FALCON is to download the latest FALCON spreadsheet template (as of 11-Feb-2025, this was [Data BOX v.FALCON.1x](https://www.doc.govt.nz/globalassets/documents/our-work/bird-banding/nznbbs-data-spreadsheet.xlsx) and then use the following code to wrangle the FIELD_2024_BADOatNZ data into the FALCON format and compile it into the FALCON spreadsheet. Once the spreadsheet is ready, you can upload it to FALCON via the [Upload Spreadsheet](https://app.birdbanding.doc.govt.nz/data-uploads/upload-spreadsheet) site (see detailed instructions on the "Data BOX submission process" within the Upload Spreadsheet site), which will do some data checks before accepting it. If you have any issues with the upload, get in touch with the NZ Banding Office (bandingoffice\@doc.govt.nz) and they can help troubleshoot the upload for you.
 
 ### download the latest "Data Box FALCON" spreadsheet (e.g., as of 11-Feb-2025, this was "Data BOX v.FALCON.1x")
+
 ```{r}
 download.file(
   url = "https://www.doc.govt.nz/globalassets/documents/our-work/bird-banding/nznbbs-data-spreadsheet.xlsx", 
-  destfile = here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), 
+  destfile = here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), 
   mode = "wb"
 )
 ```
 
 ### get species and bander codes
+
 ```{r}
 # Load species data
-Species_Data <- read_excel(path = here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), sheet = "Species",
+Species_Data <- read_excel(path = here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), sheet = "Species",
                            range = cell_cols("C:E"), col_names = FALSE)
 
 # Load bander number Data:
-Bander_Number_Data <- read_excel(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), sheet = "Banders",
+Bander_Number_Data <- read_excel(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), sheet = "Banders",
                                  range = cell_cols("A:B"), col_names = FALSE)
 ```
 
 ### tidy up species & bander number data
+
 ```{r}
 Species_Data_T1 <- Species_Data %>% 
   slice(3:n())
@@ -995,29 +2131,45 @@ Bander_Number_Data_T1 <- Bander_Number_Data %>%
   mutate(Bander_name = ifelse(Bander_name == "Luke Eberhart-Phillips", "Luke Eberhart-Hertel", Bander_name))
 ```
 
-### import FIELD_2024_BADOatNZ 
+### import FIELD_2024_BADOatNZ and do some minor tidying up (see in-line comments)
+
 ```{r}
-# con = dbcon()
-# dbExecute(con, "USE FIELD_2024_BADOatNZ")
+# connect to server
+con = dbcon()
+# connect to database
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
 BADO_capture_data <-
-  # dbq(con, "SELECT * FROM CAPTURES") %>%
-  read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/CAPTURES_breeding_season_2024.csv"), colClasses = "character") %>% 
-  mutate(date = as.Date(date)) %>% 
+  # pull out the CAPTURES table
+  dbq(con, "SELECT * FROM CAPTURES") %>%
+  # remove all whitespace from the leg-marks columns
   mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
-  mutate(across(c(UL, LL, UR, LR), ~ ifelse(. == "", "X", .))) %>%
-  mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M") | grepl("^FW", .), ., paste0("FW", .)))) %>% 
-  mutate(UR = ifelse(ring == "CP16657" & pk == 234, "FW7C", UR)) %>% 
-  mutate(UL = ifelse(ring == "CP17019" & pk == 291, "M", UL),
-         LR = ifelse(ring == "CP17019" & pk == 291, "RB", LR)) %>% 
+  # put an X in all leg-mark cases that are blank
+  mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
+  # put an "FW" in front of all text that is not X, M, FO, or starting with FW in the UL and UR positions 
+  mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M", "FO", "G", "R", "O", "W", "L", "Y") | grepl("^FW", .) | is.na(.), ., paste0("FW", .)))) %>% 
+  mutate(UL = ifelse(ring == "CP17019" & pk == 291, "M", UL), # DELETE THIS ROW
+  LR = ifelse(ring == "CP17019" & pk == 291, "RB", LR)) %>% # DELETE THIS ROW
+  # put a note in the ring field for the two birds that didn't get a metal band
   mutate(ring = ifelse(str_detect(UR, "FW2K") & pk == 23, "missing_metal_FW2K", 
                        ifelse(pk == 24 & date == as.Date("2024-10-01"), "missing_metal_O_chick", ring))) %>% 
-  mutate(capture_method = ifelse(ring == "CP16692" & pk == 40, "HA", capture_method)) %>% 
-  mutate(field_sex = ifelse(is.na(field_sex) | field_sex == "", "U", field_sex)) %>% 
-  mutate(UR = ifelse(UR == "FWFO", "FO", UR)) %>% 
-  mutate(UL = ifelse(UL == "FWR", "R", UL))
+  mutate(capture_method = ifelse(ring == "CP16692" & pk == 40, "HA", capture_method)) %>% # DELETE THIS ROW
+  mutate(field_sex = ifelse(is.na(field_sex) | field_sex == "", "U", field_sex)) %>% # DELETE THIS ROW
+  mutate(UR = ifelse(UR == "FWFO", "FO", UR)) # DELETE THIS ROW
+```
+
+### check for double-entries of forms
+
+```{r}
+BADO_capture_data %>% 
+  group_by(book_id, form_id) %>% 
+  mutate(n_ = n()) %>% 
+  filter(n_ > 1) %>% 
+  arrange(book_id, form_id) %>% 
+  select(pk, site, date, cap_start, age, field_sex, ring, UL, LL, UR, LR, observer)
 ```
 
 ### create prefix & number columns
+
 ```{r}
 NZNBBS_Template_T1 <- 
   BADO_capture_data %>% 
@@ -1029,6 +2181,7 @@ NZNBBS_Template_T1 <-
 ```
 
 ### wrangle Date, date accuracy & banding scheme column
+
 ```{r}
 NZNBBS_Template_T2 <-
   NZNBBS_Template_T1 %>% 
@@ -1045,7 +2198,9 @@ NZNBBS_Template_T2 <-
 ```
 
 ### create L3 number & L3 name column
+
 note that bird banding office has not updated Luke's last name (previously Eberhart-Phillips), also note that as of 11-Feb-2025 they haven't added the team members from Seewiesen.
+
 ```{r}
 NZNBBS_Template_T3 <- 
   NZNBBS_Template_T2 %>% 
@@ -1077,6 +2232,7 @@ NZNBBS_Template_T3 <-
 ```
 
 ### create bander number & bander name
+
 ```{r}
 NZNBBS_Template_T4 <-
   NZNBBS_Template_T3 %>% 
@@ -1104,6 +2260,7 @@ NZNBBS_Template_T4 <-
 ```
 
 ### create empty other name & other contact columns
+
 ```{r}
 NZNBBS_Template_T5 <- 
   NZNBBS_Template_T4 %>% 
@@ -1114,6 +2271,7 @@ NZNBBS_Template_T5 <-
 ```
 
 ### create NZNBBS & lookup code & stock code column
+
 ```{r}
 NZNBBS_Template_T6 <- 
   NZNBBS_Template_T5 %>% 
@@ -1133,6 +2291,7 @@ NZNBBS_Template_T6 <-
 ```
 
 ### create the event & capture code & wild captive columns
+
 ```{r}
 NZNBBS_Template_T7 <- 
   NZNBBS_Template_T6 %>% 
@@ -1153,6 +2312,7 @@ NZNBBS_Template_T7 <-
 ```
 
 ### create common & scientific name and species code columns
+
 ```{r}
 NZNBBS_Template_T8 <- 
   NZNBBS_Template_T7 %>% 
@@ -1167,6 +2327,7 @@ NZNBBS_Template_T8 <-
 ```
 
 ### create age & sex columns
+
 ```{r}
 NZNBBS_Template_T9 <- 
   NZNBBS_Template_T8 %>%
@@ -1187,46 +2348,14 @@ NZNBBS_Template_T9 <-
 ```
 
 ### create all the different location columns
-```{r}
-katie_gps_3 <-
-  st_read("/Users/luketheduke2/Downloads/Waypoints from beginning of 2024 field season to 30 Jan 2025.gpx", layer = "waypoints") %>% 
-  mutate(lat = st_coordinates(.)[, 2],   # Extract latitude
-         lon = st_coordinates(.)[, 1]) %>%  # Extract longitude
-  st_drop_geometry() %>%
-  as.data.frame() %>% 
-  rename(gps_point = name,
-         datetime_ = time) %>% 
-  mutate(gps_id = "03",
-         pk = NA) %>% 
-  select(gps_id, gps_point, datetime_, lat, lon, ele, pk) %>% 
-  mutate(gps_id = str_pad(gps_id, width = 2, side = "left", pad = "0"),
-         gps_point = str_pad(gps_point, width = 10, side = "left", pad = "0")) %>% 
-  mutate(across(everything(), as.character))
 
+```{r}
 NZNBBS_Template_T10 <- 
   NZNBBS_Template_T9 %>% 
-  left_join(., read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/GPS_POINTS_breeding_season_2024.csv"), colClasses = "character") %>% 
-              bind_rows(., katie_gps_3), 
-            by = c("gps_id", "gps_point")) %>%
-  # do some manual editing here of missing GPS data
-  mutate(lat = ifelse(pk.x == "264" & observer == "LEH", -46.606459, 
-                      ifelse(pk.x == "262" & observer == "LEH", -46.603475,
-                             ifelse(pk.x == "465" & observer == "KG", -42.415102, 
-                                    ifelse(pk.x == "263" & observer == "KG", -46.60313, 
-                                    ifelse(pk.x == "265" & observer == "HP", -46.606459, 
-                                    ifelse(pk.x == "245" & observer == "MV", -43.733753, 
-                                    ifelse(pk.x == "234" & observer == "MV", -43.733096, 
-                                    ifelse(pk.x == "466" & observer == "KG", -39.576199, 
-                                    ifelse(pk.x == "219" & observer == "AW", -43.733096, lat))))))))),
-         lon = ifelse(pk.x == "264" & observer == "LEH", 168.433454,
-                       ifelse(pk.x == "262" & observer == "LEH", 168.422347, 
-                              ifelse(pk.x == "465" & observer == "KG", 173.674726, 
-                                    ifelse(pk.x == "263" & observer == "KG", 168.42172, 
-                                    ifelse(pk.x == "265" & observer == "HP", 168.433454, 
-                                    ifelse(pk.x == "245" & observer == "MV", 170.144324, 
-                                    ifelse(pk.x == "234" & observer == "MV", 170.143316, 
-                                    ifelse(pk.x == "466" & observer == "KG", 176.931095, 
-                                    ifelse(pk.x == "219" & observer == "AW", 170.143316, lon))))))))),
+  left_join(., dbq(con, "SELECT * FROM GPS_POINTS"), 
+            by = c("gps_id", "gps_point")) %>% 
+  mutate(
+    # specify the region code for each site ID
     Region_Code = case_when(
       site %in% c("KT", "CR", "KK", "TS") ~ "11. Canterbury",
       site %in% c("TA", "TP") ~ "13. Southland",
@@ -1236,6 +2365,7 @@ NZNBBS_Template_T10 <-
       site %in% c("OM", "PR") ~ "12. Otago",
       site %in% c("TO") ~ "8. Manawatu-Whanganui"
     ),
+    # specify the general locality for each site ID
     Locality_general = case_when(
       site == "KT" ~ "Kaitorete Spit",
       site == "TS" ~ "Tasman River",
@@ -1252,6 +2382,7 @@ NZNBBS_Template_T10 <-
       site == "PB" ~ "Porters Beach, Abel Tasman National Park",
       site == "TO" ~ "Rangipo Desert"
     ),
+    # specify the locality description for each site ID
     Locality_description = case_when(
       site == "KT" ~ "Kaitorete Spit, Lake Ellesmere",
       site == "TS" ~ "Upper Tasman River, Aoraki National Park",
@@ -1268,16 +2399,19 @@ NZNBBS_Template_T10 <-
       site == "PB" ~ "Porters Beach, Abel Tasman National Park",
       site == "TO" ~ "Rangipo Desert"
     ),
+    # change coordinates to numeric
     Latitude = as.numeric(lat),
     Longitude = as.numeric(lon),
     Easting = NA,
     Northing = NA,
+    # specify coordinate system and location accuracy
     `Coordinate system` = "WGS84",
     Locality_accuracy = "10" # 10m accuracy of locations
   )
 ```
 
 ### create orange recapture related columns
+
 ```{r}
 NZNBBS_Template_T11 <-
   NZNBBS_Template_T10 %>%
@@ -1301,7 +2435,7 @@ NZNBBS_Template_T11 <-
       NZNBBS_code == "1" ~ "",
       NZNBBS_code %in% c("2b", "3") & UL == "X" ~ "",
       NZNBBS_code %in% c("2b", "3") & str_starts(UL, "FW") ~ str_replace(UL, "FW(..)", "FW(\\1)"),
-      NZNBBS_code %in% c("2b", "3") ~ UL
+      NZNBBS_code %in% c("2b", "3") & UL == "M" ~ "*"
   ),
     Left_tarsus_1 = case_when(
       NZNBBS_code == "1" ~ "",
@@ -1314,7 +2448,7 @@ NZNBBS_Template_T11 <-
       NZNBBS_code == "1" ~ "",
       NZNBBS_code %in% c("2b", "3") & UR == "X" ~ "",
       NZNBBS_code %in% c("2b", "3") & str_starts(UR, "FW") ~ str_replace(UR, "FW(..)", "FW(\\1)"),
-      NZNBBS_code %in% c("2b", "3") ~ UR#,
+      NZNBBS_code %in% c("2b", "3") & UL == "M" ~ "*"
   ),
     Right_tarsus_1 = case_when(
       NZNBBS_code == "1" ~ "",
@@ -1349,6 +2483,7 @@ NZNBBS_Template_T11 <-
 ```
 
 ### create red capture related columns
+
 ```{r}
 NZNBBS_Template_T12 <- 
   NZNBBS_Template_T11 %>%
@@ -1371,11 +2506,11 @@ NZNBBS_Template_T12 <-
     Left_tibia_2 = case_when(
       NZNBBS_code %in% c("1", "3") & UL == "X" ~ "",
       NZNBBS_code %in% c("1", "3") & str_starts(UL, "FW") ~ str_replace(UL, "FW(..)", "FW(\\1)"),
-      NZNBBS_code %in% c("1", "3") ~ UL,
+      NZNBBS_code %in% c("1", "3") & UL == "M" ~ "*",
       NZNBBS_code == "2b" ~ "",
       tag_action %in% c("S", "R") & UL == "X" ~ "",
       tag_action %in% c("S", "R") & str_starts(UL, "FW") ~ str_replace(UL, "FW(..)", "FW(\\1)"),
-      tag_action %in% c("S", "R") ~ UL,
+      tag_action %in% c("S", "R") & UL == "M" ~ "*",
        
   ),
     Left_tarsus_2 = case_when(
@@ -1391,11 +2526,11 @@ NZNBBS_Template_T12 <-
     Right_tibia_2 = case_when(
       NZNBBS_code %in% c("1", "3") & UR == "X" ~ "",
       NZNBBS_code %in% c("1", "3") & str_starts(UR, "FW") ~ str_replace(UR, "FW(..)", "FW(\\1)"),
-      NZNBBS_code %in% c("1", "3") ~ UR,
+      NZNBBS_code %in% c("1", "3") & UR == "M" ~ "*",
       NZNBBS_code == "2b" ~ "",
       tag_action %in% c("S", "R") & UR == "X" ~ "",
       tag_action %in% c("S", "R") & str_starts(UR, "FW") ~ str_replace(UR, "FW(..)", "FW(\\1)"),
-      tag_action %in% c("S", "R") ~ UR,
+      tag_action %in% c("S", "R") & UR == "M" ~ "*",
   ),
     Right_tarsus_2 = case_when(
       NZNBBS_code %in% c("1", "3") & LR == "X" ~ "",
@@ -1436,7 +2571,9 @@ NZNBBS_Template_T12 <-
 ```
 
 ### clean up color codes according to FALCON requirements
+
 need a "/" between colors stacked on a single leg segment, and "L" for lime should be coded as "LG"
+
 ```{r}
 NZNBBS_Template_T12.5 <- 
   NZNBBS_Template_T12 %>% 
@@ -1456,18 +2593,36 @@ NZNBBS_Template_T12.5 <-
                                 paste0(substr(Right_tibia_2, 1, 1), "/", substr(Right_tibia_2, 2, 2)), Right_tibia_2),
          Right_tarsus_2 = ifelse(nchar(Right_tarsus_2) == 2 & substr(Right_tarsus_2, 1, 1) != "F",
                                  paste0(substr(Right_tarsus_2, 1, 1), "/", substr(Right_tarsus_2, 2, 2)), Right_tarsus_2)) %>% 
-  mutate(Left_tibia_1 = str_replace_all(Left_tibia_1, "L", "LG"), 
-         Left_tarsus_1 = str_replace_all(Left_tarsus_1, "L", "LG"), 
-         Right_tibia_1 = str_replace_all(Right_tibia_1, "L", "LG"), 
-         Right_tarsus_1 = str_replace_all(Right_tarsus_1, "L", "LG"),
-         Left_tibia_2 = str_replace_all(Left_tibia_2, "L", "LG"), 
-         Left_tarsus_2 = str_replace_all(Left_tarsus_2, "L", "LG"), 
-         Right_tibia_2 = str_replace_all(Right_tibia_2, "L", "LG"), 
-         Right_tarsus_2 = str_replace_all(Right_tarsus_2, "L", "LG")) %>% as.data.table()
+  mutate(Left_tibia_1 = if_else(nchar(Left_tibia_1) <= 2 & str_detect(Left_tibia_1, "L"),
+                                str_replace(Left_tibia_1, "L", "LG"),
+                                Left_tibia_1), 
+         Left_tarsus_1 = if_else(nchar(Left_tarsus_1) <= 2 & str_detect(Left_tarsus_1, "L"),
+                                str_replace(Left_tarsus_1, "L", "LG"),
+                                Left_tarsus_1), 
+         Right_tibia_1 = if_else(nchar(Right_tibia_1) <= 2 & str_detect(Right_tibia_1, "L"),
+                                str_replace(Right_tibia_1, "L", "LG"),
+                                Right_tibia_1), 
+         Right_tarsus_1 = if_else(nchar(Right_tarsus_1) <= 2 & str_detect(Right_tarsus_1, "L"),
+                                str_replace(Right_tarsus_1, "L", "LG"),
+                                Right_tarsus_1),
+         Left_tibia_2 = if_else(nchar(Left_tibia_2) <= 2 & str_detect(Left_tibia_2, "L"),
+                                str_replace(Left_tibia_2, "L", "LG"),
+                                Left_tibia_2), 
+         Left_tarsus_2 = if_else(nchar(Left_tarsus_2) <= 2 & str_detect(Left_tarsus_2, "L"),
+                                str_replace(Left_tarsus_2, "L", "LG"),
+                                Left_tarsus_2), 
+         Right_tibia_2 = if_else(nchar(Right_tibia_2) <= 2 & str_detect(Right_tibia_2, "L"),
+                                str_replace(Right_tibia_2, "L", "LG"),
+                                Right_tibia_2), 
+         Right_tarsus_2 = if_else(nchar(Right_tarsus_2) <= 2 & str_detect(Right_tarsus_2, "L"),
+                                str_replace(Right_tarsus_2, "L", "LG"),
+                                Right_tarsus_2)) %>% as.data.table()
 ```
 
 ### create status and condition columns
+
 if the `capture_status` in the database is `D` then the Status_code_1 (i.e., status of bird at capture) will need to be manually added (this should be a rare occurrence). Status_code_2 is the status of bird at release, which will be `alive` for all cases except for extremely rare cases when the bird died during the capture (i.e., was alive but died as a result of the capture event) - these will also need to be added manually by modifying the code to the specific `pk` number of the observation.
+
 ```{r}
 NZNBBS_Template_T13.5 <- 
   NZNBBS_Template_T12.5 %>%
@@ -1481,6 +2636,7 @@ NZNBBS_Template_T13.5 <-
 ```
 
 ### create status detail 1 & 2 & notes columns
+
 ```{r}
 NZNBBS_Template_T13 <- 
   NZNBBS_Template_T13.5 %>%
@@ -1539,6 +2695,7 @@ NZNBBS_Template_T14 <-
 ```
 
 ### create detail, units & data columns of readily transferable columns
+
 ```{r}
 NZNBBS_Template_T15.5 <- 
   NZNBBS_Template_T14 %>%
@@ -1570,6 +2727,7 @@ NZNBBS_Template_T15.5 <-
 ```
 
 ### create detail, units & data columns of sample columns
+
 ```{r}
 # break up the "sample" column in the database into 4 columns that contain the 
 # 2-character strings describing the samples collected for a given individual
@@ -1619,12 +2777,11 @@ NZNBBS_Template_T17 <-
     OtherDetail1 = "", 
     OtherDetailUnit1 = "", 
     OtherDetailData1 = ""
-  ) %>% 
-  # remove duplicate entries
-  filter(pk.x != "242" & pk.x != "243" & pk.x != "244")
+  ) 
 ```
 
 ### inspect map of points for each site to make sure latitude and longitude data are correct
+
 ```{r, eval=FALSE}
 NZNBBS_Template_T17 %>% 
   pull(site) %>% table()
@@ -1662,7 +2819,7 @@ NZNBBS_Template_T17 %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>% 
   mapview()
 
-### Kina Peninsula ----
+### Kena Peninsula ----
 NZNBBS_Template_T17 %>% 
   filter(site == "KP") %>% 
   select(Longitude, Latitude) %>% 
@@ -1679,9 +2836,12 @@ NZNBBS_Template_T17 %>%
 ### Motueka Spit ----
 NZNBBS_Template_T17 %>% 
   filter(site == "MS") %>% 
-  select(Longitude, Latitude) %>% 
+  select(Longitude, Latitude, gps_id, gps_point, site, UR, form_id, book_id) %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>% 
   mapview()
+
+# one error by Tasman Valley (lat > -41.3)
+# NZNBBS_Template_T17 %>% filter(site == "MS" & Latitude < -42)
 
 ### Old Man Range ----
 NZNBBS_Template_T17 %>% 
@@ -1722,51 +2882,57 @@ NZNBBS_Template_T17 %>%
 # one error by Te Anau (lat > -45.5)
 NZNBBS_Template_T17 %>% 
   filter(site == "TP") %>% 
-  filter(pk.x != "242" & pk.x != "243" & pk.x != "244") %>% 
+  # filter(pk.x != "242" & pk.x != "243" & pk.x != "244") %>%  # removed from db DELETE THIS ROW of code
   select(Longitude, Latitude) %>% 
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>% 
   mapview()
 
-# # duplicate entries from BK and HP with incorrect site added
-# NZNBBS_Template_T17 %>% filter(site == "TP" & Latitude > -45.5)
-# NZNBBS_Template_T17 %>% filter(date == as.Date("2024-10-14") & gps_id == "02")
-# 
-# NZNBBS_Template_T17 %>% 
-#   filter(ring %in% c("CP19909", "CP19910", "CP19911")) %>% 
-#   filter(pk.x != "242" & pk.x != "243" & pk.x != "244")
-
 ### Tasman Valley ----
-# one error by Motueka Spit (lat > -41.3)
 NZNBBS_Template_T17 %>% 
   filter(site == "TS") %>% 
   select(Longitude, Latitude) %>%
   st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>% 
   mapview()
 
-# # duplicate entries from BK and HP with incorrect site added
-# NZNBBS_Template_T17 %>% filter(site == "TS" & Latitude > -41.3) %>% select(site, observer, gps_id, gps_point, date, time) %>% arrange(time)
-# NZNBBS_Template_T17 %>% filter(date == as.Date("2024-10-11")) %>% select(site, observer, gps_id, gps_point, date, time, form_id, book_id) %>% arrange(time)
-# 
-# NZNBBS_Template_T17 %>% filter(gps_id == "06" & gps_point == "44") %>% select(site, observer, gps_id, gps_point, date, time, form_id, book_id) %>% arrange(time)
-# 
-# read.csv(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/GPS_POINTS_breeding_season_2024.csv"), colClasses = "character")  %>% 
+# read.csv(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/GPS_POINTS_breeding_season_2024.csv"), colClasses = "character")  %>% 
 #   filter(gps_id == "06" & gps_point == "0000000044") #%>% 
 #   # select(lon, lat) %>% 
 #   st_as_sf(coords = c("lon", "lat"), crs = 4326) %>% 
 #   mapview()
 ```
 
+### check that all flags contain appropriate characters
+
+```{r}
+NZNBBS_Template_T17 %>%
+  mutate(flag = paste(UL, UR, sep = " ") %>% 
+           str_extract_all("\\bFW\\w*") %>% 
+           sapply(paste, collapse = " ")) %>% 
+  filter(!grepl("[ACEHJKLMPNTUVXY1234567890]", flag, ignore.case = TRUE)) %>% select(UL, UR, flag) %>% filter(flag != "")
+```
+
+### check for double-entries of forms
+
+```{r}
+NZNBBS_Template_T18 <- 
+  NZNBBS_Template_T17 %>% 
+  group_by(site, ring, date, observer, age, field_sex, UL, LL, UR, LR) %>% 
+  slice(1) %>% 
+  ungroup()
+```
 
 ### consolidate final table to the columns required by FALCON
+
 ```{r, cache=FALSE}
 Bands_sheet_columns <-
-  read_excel(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), 
+  read_excel(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"), 
              sheet = "Bands", skip = 1) %>% 
   names()
 
 # select the columns that appear in the "Bands" sheet of the FALCON spreadsheet
 NZNBBS_BADO_data_ready_to_upload <- 
-  NZNBBS_Template_T17 %>% 
+  NZNBBS_Template_T18 %>% 
+  arrange(date, time) %>% 
   select(all_of(Bands_sheet_columns))
 ```
 
@@ -1776,10 +2942,11 @@ NZNBBS_BADO_data_ready_to_upload %>%
 ```
 
 ### add the data to the FALCON excel workbook
+
 ```{r, eval=FALSE}
 # load the Data_BOX_v.FALCON.1x workbook
 Data_BOX_v.FALCON.1x <- 
-  loadWorkbook(here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"))
+  loadWorkbook(here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet.xlsx"))
 
 # Write data to the Bands sheet starting at row 3 and dropping the column names 
 # and rownames
@@ -1789,6 +2956,1102 @@ writeData(Data_BOX_v.FALCON.1x, "Bands",
 
 # Save the updated file
 saveWorkbook(Data_BOX_v.FALCON.1x, 
-             here("/Users/luketheduke2/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet_BADO_2024_breeding_captures.xlsx"), 
+             here("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/nznbbs/nznbbs-data-spreadsheet_BADO_2024_breeding_captures.xlsx"), 
              overwrite = TRUE)
+```
+
+# Preparing the used and available colour-combo sheets
+
+Load latest version of the marked_bdots_xxx_20xx.xlsx file (see chunk above for the generation of this)
+
+```{r, eval=FALSE}
+BADO_banding <- 
+  read_xlsx(path = here("data/marked_bdots_Mar_2025_.xlsx"),
+            col_types = "text", 
+            sheet = 1)  %>% 
+  mutate(Date = as.POSIXct(as.Date(as.numeric(Date), origin = "1899-12-30"), tz = "Pacific/Auckland"))
+```
+
+wrangle the combos into the XX.XX\|XX.XX format (which is used by the combo_matrix_generateR function)
+
+```{r}
+BADO_banding_combo_data <- 
+  BADO_banding %>% 
+  filter(nchar(Left_tarsus) >= 3) %>% 
+  select(Prefix, Number, Sex, Locality_general, Left_tibia, Left_tarsus, Right_tibia, Right_tarsus) %>%
+  mutate(across(c(Left_tibia, Left_tarsus, Right_tibia, Right_tarsus), ~ ifelse(is.na(.), "XX", .)))%>%
+  mutate(across(c(Left_tibia, Left_tarsus, Right_tibia, Right_tarsus), ~ str_replace_all(.x, "LG", "L") %>% str_replace_all("/", "") %>% str_replace_all("\\*", "M") %>% str_replace_all("FW", "XX") %>% str_replace_all("FO", "XX"))) %>% 
+  mutate(ring = paste0(Prefix, Number),
+         code = paste0(Left_tarsus, "-", Right_tarsus))
+```
+
+Check that the codes only contain the following characters: B, G, R, O, W, L, Y, X
+
+```{r}
+# function to determine which characters have been used in the color combos
+find.characters <- function(v1)
+{
+  x1 <- unique(unlist(strsplit(v1, '')))
+  indx <- grepl('[A-Z]', x1)
+  c(sort(x1[indx]), sort(x1[!indx]))
+}
+
+# Run the function on the data to see which characters are being used in the combo string
+find.characters(as.character(BADO_banding_combo_data$code))
+```
+
+### quick grabs of all used combos for a given population (e.g., to send as line in an email)
+
+with "R" in the upper left tarsus position (e.g., for Kaikoura)
+
+```{r}
+used_RX_adult_codes <- 
+  BADO_banding_combo_data[which(grepl("[[R]{1}[[GROWLYB]{1}\\-[[GROWLYB]{1}[[GROWLYB]{1}", BADO_banding_combo_data$code)),]
+
+used_RX_adult_codes$code %>% sort() %>% unique() %>% paste(collapse = ", ")
+```
+
+with "Y" in the upper left tarsus position and "Y" or "O" in the lower left tarsus position (e.g., for the Cass)
+
+```{r}
+used_YY_adult_codes <- 
+  BADO_banding_combo_data[which(grepl("[[Y]{1}[[YO]{1}\\-[[GROWLYB]{1}[[GROWLYB]{1}", BADO_banding_combo_data$code)),]
+
+used_YY_adult_codes$code %>% sort() %>% unique() %>% paste(collapse = ", ")
+```
+
+### function to compile the combo matrix for a given population
+
+```{r}
+combo_matrix_generateR <- 
+  function(upper_left_tarsus, 
+           lower_left_tarsus = c("B", "G", "R", "O", "W", "L", "Y")){
+    if(is.null(lower_left_tarsus)){
+      combo_grepl <- 
+        paste0("[[", upper_left_tarsus, 
+               "]{1}[[GROWLYB]{1}\\-[[GROWLYB]{1}[[GROWLYB]{1}")
+      lower_left_tarsus
+      }
+    else{
+      combo_grepl <- 
+        paste0("[[", upper_left_tarsus, "]{1}[[", 
+               paste0(lower_left_tarsus, collapse = ""), 
+               "]{1}\\-[[GROWLYB]{1}[[GROWLYB]{1}")
+      }
+
+  # subset data to include all combos for the color specified in the upper_left_tarsus 
+  # and lower_left_tarsus positions (see if else above)
+  BADO_banding_combo_data_pop <- 
+    BADO_banding_combo_data[which(grepl(combo_grepl, BADO_banding_combo_data$code)), ]
+
+  #### Build empty color combo template ----
+  
+  # Create an empty data frame for all potential color combos given the p
+  # opulation-specific combos specified above
+  rings <- c("B", "G", "R", "O", "W", "L", "Y")
+  xx <- as.data.frame(array(, c(8, 8)))
+  names(xx) <- c("col", "B", "G", "R", "O", "W", "L", "Y")
+  xx$col <- c("", "B", "G", "R", "O", "W", "L", "Y")
+  xx[1,] <- c("", "B", "G", "R", "O", "W", "L", "Y")
+  yy <- 
+    data.frame(code=c(paste0(upper_left_tarsus, 'B-XX'),
+                      paste0(upper_left_tarsus, 'G-XX'),
+                      paste0(upper_left_tarsus, 'R-XX'),
+                      paste0(upper_left_tarsus, 'O-XX'),
+                      paste0(upper_left_tarsus, 'W-XX'),
+                      paste0(upper_left_tarsus, 'L-XX'),
+                      paste0(upper_left_tarsus, 'Y-XX')), 
+                      id <- 1:7) %>% 
+    filter(str_sub(code, 2, 2) %in% lower_left_tarsus)
+  
+  zz <- merge(yy, xx, all.x=T, all.y=T); zz <- zz[order(zz$id),]
+  
+  if(nrow(BADO_banding_combo_data_pop) == 0){
+    zz1 <-
+    zz[-1,-2] %>% 
+    rename(right_tarsus = col,
+           left_tarsus = code,
+           bot____B = B,
+           bot____G = G,
+           bot____R = R,
+           bot____O = O,
+           bot____W = W,
+           bot___LG = L,
+           bot____Y = Y) %>% 
+    mutate(right_tarsus = ifelse(str_detect(right_tarsus, "[BGROWLY]{1}"), paste0("top____", right_tarsus), "")) %>%
+    mutate(right_tarsus = ifelse(right_tarsus == "top____L", "top___LG", right_tarsus)) %>%
+    mutate(left_tarsus = ifelse(right_tarsus == "", "", left_tarsus)) %>% 
+    mutate(bot____B = ifelse(bot____B == "B", "bot____B", bot____B)) %>% 
+    mutate(bot____G = ifelse(bot____G == "G", "bot____G", bot____G)) %>% 
+    mutate(bot____R = ifelse(bot____R == "R", "bot____R", bot____R)) %>% 
+    mutate(bot____O = ifelse(bot____O == "O", "bot____O", bot____O)) %>% 
+    mutate(bot____W = ifelse(bot____W == "W", "bot____W", bot____W)) %>% 
+    mutate(bot___LG = ifelse(bot___LG == "L", "bot___LG", bot___LG)) %>% 
+    mutate(bot____Y = ifelse(bot____Y == "Y", "bot____Y", bot____Y))
+    
+    print(zz1)
+  }
+  else{
+  
+  #### Preliminary checks of data ----
+  # Check if multiple color combinations were associated with individual metal rings
+  ring <- unique(BADO_banding_combo_data_pop$ring)
+  for(i in ring){
+    ss <- length(unique(BADO_banding_combo_data_pop$Sex[BADO_banding_combo_data_pop$ring%in%i]))
+    if(ss>1){cat(i, as.character(unique(BADO_banding_combo_data_pop$sex[BADO_banding_combo_data_pop$ring%in%i])), '\n')}}
+  
+  # check the number of birds banded with the same combo
+  cr <- table(BADO_banding_combo_data_pop$ring, BADO_banding_combo_data_pop$code)
+  for (i in 1:ncol(cr)){
+    x <- sum(cr[,i]>0)
+    if(x>2){cat(dimnames(cr)[[2]][i], ' - ', x, '\n')}}
+  
+  # List of individual color combinations in the data frame
+  code <- as.character(sort(unique(BADO_banding_combo_data_pop$code))) %>% sort()
+  length(code)
+  
+  # These lines will only check if number of full combinations is equal to the 
+  # number of total color combinations in the capture files. This is only used 
+  # for a check in the end, to see if all color combos were included in the color 
+  # combo sheets
+  fc0 <- 0; FC <- c() # number of full combos; list of full combos
+  
+  for(i in code){
+    # split combo by position
+    r1 <- str_sub(unlist(strsplit(i, "[-]"))[1], 1, 1) # W
+    r2 <- str_sub(unlist(strsplit(i, "[-]"))[1], 2, 2) # W
+    r3 <- str_sub(unlist(strsplit(i, "[-]"))[2], 1, 1) # R
+    r4 <- str_sub(unlist(strsplit(i, "[-]"))[2], 2, 2) # O
+  
+    # if colors in all 4 positions are included in the "rings" (see line 14)
+    if( sum(c(r1,r2,r3,r4) %in% rings) == 4){  
+      if("M" %in% c(r1,r2,r3,r4)){fc0 <- fc0+1; FC <- c(FC, i)}}}
+  
+  fc0 == length(code) # number of combos = number of full combos
+  # IT NEEDS CHECKS IF ITS FALSE - it means that some combinations might not be 
+  # included in the color combo sheet
+  
+  #### Build the table of used combos ----
+  # reset
+  fc <- 0; FC <- c()
+  
+  # extract unique codes from capture data
+  code <- as.character(sort(unique(BADO_banding_combo_data_pop$code)))
+  
+  for(i in code){
+    # extract the combo on each leg segment
+    # E.g. "WX.RB|MX.YB"
+    r1 <- substr(unlist(strsplit(i, "[-]"))[1], 1, 1) # R
+    r2 <- substr(unlist(strsplit(i, "[-]"))[1], 2, 2) # B
+    r3 <- substr(unlist(strsplit(i, "[-]"))[2], 1, 1) # Y
+    r4 <- substr(unlist(strsplit(i, "[-]"))[2], 2, 2) # B
+    
+    if( sum(c(r1, r2, r3, r4)%in%rings) == 4){
+        {fc <- fc + 1; FC <- c(FC, i)}}
+  
+        codei <- paste(upper_left_tarsus, r2, '-', 'XX', sep='')
+      if(length(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i]))==1){
+        R1 <- as.character(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i]))
+        zz[zz$code%in%codei & zz$col%in%r3, names(zz)%in%r4] <-
+          paste(R1, unique(BADO_banding_combo_data_pop$Sex[BADO_banding_combo_data_pop$ring%in%R1]),sep='_')}
+      
+      if(length(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i]))==2){
+        R1 <- as.character(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i])[1])
+        R2 <- as.character(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i])[2])
+        zz[zz$code%in%codei & zz$col%in%r3, names(zz)%in%r4] <- 
+          paste(paste(R1,unique(BADO_banding_combo_data_pop$Sex[BADO_banding_combo_data_pop$ring%in%R1]),sep='_'), 
+                paste(R2,unique(BADO_banding_combo_data_pop$Sex[BADO_banding_combo_data_pop$ring%in%R2]),sep='_'), sep=', ') } 
+      
+      if(length(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i]))==3){
+        R1 <- as.character(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i])[1])
+        R2 <- as.character(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i])[2])
+        R3 <- as.character(unique(BADO_banding_combo_data_pop$ring[BADO_banding_combo_data_pop$code%in% i])[3])
+        zz[zz$code%in%codei & zz$col%in%r3, names(zz)%in%r4] <- 
+          paste(  paste(R1,unique(BADO_banding_combo_data_pop$Sex[BADO_banding_combo_data_pop$ring%in%R1]),sep='_'), 
+                  paste(R2,unique(BADO_banding_combo_data_pop$Sex[BADO_banding_combo_data_pop$ring%in%R2]),sep='_'),
+                  paste(R3,unique(BADO_banding_combo_data_pop$Sex[BADO_banding_combo_data_pop$ring%in%R3]),sep='_'), sep=', ') }}#}
+  
+  # remove the first row and first column
+  zz1 <- zz[-1,-2]; head(zz1)
+  
+  #### Final checks ----
+  # Check the head of the spreadsheet
+  head(zz)
+  
+  # check one of the blocks to check (in this case birds with RB)
+  # filter(zz1, code == "RB|M.XX")
+  filter(zz1, code == "BW-XX")
+  
+  # check that all combos are included in the sheet
+  zz2 <- zz1[!zz1$col %in%"" ,]
+  zzFC <- c()
+  for (i in 1:nrow(zz2)){
+    for(j in 3:ncol(zz2)){
+      c <- zz2[i,j]
+      if(!is.na(c) & !is.na(zz2$col[i])) {
+        cd  <- sub("X", names(zz2)[j], sub("X", zz2$col[i], zz2$code[i]))
+        cd1 <- paste(strsplit(cd, NULL)[[1]][1], 
+                     strsplit(cd, NULL)[[1]][2],
+                     "-", #strsplit(cd, NULL)[[1]][4], "X.", 
+                     strsplit(cd, NULL)[[1]][4], 
+                     strsplit(cd, NULL)[[1]][5], sep='')
+        zzFC <- c(zzFC, cd1)}}}
+  
+  # IF TRUE THE NUMBER OF FULL COMBOS IN CAPTURE FILE IS EQUAL TO THE NUMBER OF 
+  # FULL COMBOS IN THE CREATED DATA FILE --> ALL GOOD!!!
+  length(zzFC) == fc
+  
+  # IF THE PREVIOUS STATEMENT IS FALSE -> CHECKS ARE NEEDED
+  # The following two objects should both be empty if all is good:
+  
+  # combinations that are included in the combo sheet but are not found in the capture file
+  # zzFC[ !zzFC%in%str_sub(FC, 4, 11)]
+  setdiff(zzFC, FC)
+  
+  # combinations that are in the capture file but were not included in the combo sheet
+  setdiff(FC, zzFC)
+  
+  # number of full combinations in the capture file are equal to the number of combos in the combo sheet
+  length(zzFC) == fc0 
+  
+  zz1 <-
+    zz1 %>% 
+    rename(right_tarsus = col,
+           left_tarsus = code,
+           bot____B = B,
+           bot____G = G,
+           bot____R = R,
+           bot____O = O,
+           bot____W = W,
+           bot___LG = L,
+           bot____Y = Y) %>% 
+    mutate(right_tarsus = ifelse(str_detect(right_tarsus, "[BGROWLY]{1}"), paste0("top____", right_tarsus), "")) %>%
+    mutate(right_tarsus = ifelse(right_tarsus == "top____L", "top___LG", right_tarsus)) %>%
+    mutate(left_tarsus = ifelse(right_tarsus == "", "", left_tarsus)) %>% 
+    mutate(bot____B = ifelse(bot____B == "B", "bot____B", bot____B)) %>% 
+    mutate(bot____G = ifelse(bot____G == "G", "bot____G", bot____G)) %>% 
+    mutate(bot____R = ifelse(bot____R == "R", "bot____R", bot____R)) %>% 
+    mutate(bot____O = ifelse(bot____O == "O", "bot____O", bot____O)) %>% 
+    mutate(bot____W = ifelse(bot____W == "W", "bot____W", bot____W)) %>% 
+    mutate(bot___LG = ifelse(bot___LG == "L", "bot___LG", bot___LG)) %>% 
+    mutate(bot____Y = ifelse(bot____Y == "Y", "bot____Y", bot____Y))
+  
+  print(zz1)
+  }}
+```
+
+```{r, eval=FALSE}
+# Load the existing workbook
+BADO_combo_matricies <- loadWorkbook(here("data/BADO_combo_matricies.xlsx"))
+```
+
+## Mangawhai
+
+White over green on left
+
+```{r}
+MG <- 
+  combo_matrix_generateR(upper_left_tarsus = "W", 
+                         lower_left_tarsus = "G")
+MG
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Mangawhai" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Mangawhai")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Mangawhai")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Mangawhai", x = MG)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Papakanui
+
+White over yellow on left
+
+```{r}
+PA <- 
+  combo_matrix_generateR(upper_left_tarsus = "W", 
+                         lower_left_tarsus = "Y")
+PA
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Papakanui" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Papakanui")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Papakanui")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Papakanui", x = PA)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Auckland region
+
+White over orange on left
+
+```{r}
+AK <- 
+  combo_matrix_generateR(upper_left_tarsus = "W", 
+                         lower_left_tarsus = "O")
+
+AK
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Auckland" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Auckland")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Auckland")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Auckland", x = AK)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Port Waikato
+
+White over orange on left
+
+```{r}
+PW_yl <- 
+  combo_matrix_generateR(upper_left_tarsus = "Y", 
+                         lower_left_tarsus = "L")
+PW_lb <- 
+  combo_matrix_generateR(upper_left_tarsus = "L", 
+                         lower_left_tarsus = "B")
+PW_bl <- 
+  combo_matrix_generateR(upper_left_tarsus = "B", 
+                         lower_left_tarsus = "L")
+
+PW <- 
+  bind_rows(PW_yl, rbind(names(PW_lb), PW_lb), rbind(names(PW_bl), PW_bl)) %>% 
+  mutate(left_tarsus = ifelse(left_tarsus == "left_tarsus", "", left_tarsus),
+         right_tarsus = ifelse(right_tarsus == "right_tarsus", "", right_tarsus))
+
+PW
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Port_Waikato" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Port_Waikato")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Port_Waikato")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Port_Waikato", x = PW)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Rangipo Desert (Tongariro)
+
+Blue over orange on left
+
+```{r}
+TO <- 
+  combo_matrix_generateR(upper_left_tarsus = "B", 
+                         lower_left_tarsus = "O")
+TO
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Tongariro" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Tongariro")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Tongariro")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Tongariro", x = TO)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Hawke's Bay Coast
+
+Green over white or red on left
+
+```{r}
+HC <- 
+  combo_matrix_generateR(upper_left_tarsus = "G", 
+                         lower_left_tarsus = c("W", "R"))
+HC
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Hawkes_Bay_Coast" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Hawkes_Bay_Coast")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Hawkes_Bay_Coast")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Hawkes_Bay_Coast", x = HC)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Hawke's Bay Rivers
+
+Green over blue or yellow on left
+
+```{r}
+HR <- 
+  combo_matrix_generateR(upper_left_tarsus = "G", 
+                         lower_left_tarsus = c("B", "Y"))
+HR
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Hawkes_Bay_Rivers" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Hawkes_Bay_Rivers")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Hawkes_Bay_Rivers")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Hawkes_Bay_Rivers", x = HR)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Tasman Bay (Motueka, Porter's Beach, Kena Peninsula)
+
+Green over green or orange on left
+
+```{r}
+MO <- 
+  combo_matrix_generateR(upper_left_tarsus = "G", 
+                         lower_left_tarsus = c("G", "O"))
+MO
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Motueka_Tasman_Bay" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Motueka_Tasman_Bay")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Motueka_Tasman_Bay")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Motueka_Tasman_Bay", x = MO)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Kaikoura
+
+Red in upper left position
+
+```{r}
+KK <- 
+  combo_matrix_generateR(upper_left_tarsus = "R")
+KK
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Kaikoura" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Kaikoura")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Kaikoura")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Kaikoura", x = KK)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Kaitorete Spit
+
+Orange in upper left position
+
+```{r}
+KT <- 
+  combo_matrix_generateR(upper_left_tarsus = "O")
+KT
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Kaitorete" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Kaitorete")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Kaitorete")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Kaitorete", x = KT)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Tasman Valley (Aoraki/Mt Cook)
+
+Yellow over blue on left
+
+```{r}
+TS <- 
+  combo_matrix_generateR(upper_left_tarsus = "Y", 
+                         lower_left_tarsus = "B")
+TS
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Tasman_Valley" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Tasman_Valley")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Tasman_Valley")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Tasman_Valley", x = TS)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Cass River Mouth
+
+Yellow over yellow or orange on left
+
+```{r}
+CR <- 
+  combo_matrix_generateR(upper_left_tarsus = "Y", 
+                         lower_left_tarsus = c("Y", "O"))
+CR
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Cass_River" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Cass_River")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Cass_River")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Cass_River", x = CR)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Macaulay River
+
+Yellow over red on left
+
+```{r}
+MR <- 
+  combo_matrix_generateR(upper_left_tarsus = "Y", 
+                         lower_left_tarsus = "R")
+MR
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Macaulay_River" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Macaulay_River")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Macaulay_River")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Macaulay_River", x = MR)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Maryburn
+
+Yellow over white on left
+
+```{r}
+MB <- 
+  combo_matrix_generateR(upper_left_tarsus = "Y", 
+                         lower_left_tarsus = "W")
+MB
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Maryburn" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Maryburn")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Maryburn")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Maryburn", x = MB)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Pisa and Old Man Ranges
+
+Yellow over green on left
+
+```{r}
+PR_OM <- 
+  combo_matrix_generateR(upper_left_tarsus = "Y", 
+                         lower_left_tarsus = "G")
+PR_OM
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Pisa_and_Old_Man_Ranges" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Pisa_and_Old_Man_Ranges")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Pisa_and_Old_Man_Ranges")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Pisa_and_Old_Man_Ranges", x = PR_OM)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Upukeroa River Mouth (Te Anau)
+
+Blue over blue or white on left
+
+```{r}
+TA <- 
+  combo_matrix_generateR(upper_left_tarsus = "B", 
+                         lower_left_tarsus = c("B", "W"))
+TA
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Upukeroa_River" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Upukeroa_River")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Upukeroa_River")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Upukeroa_River", x = TA)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Tiwai Point
+
+White over white, blue, or red on left
+
+```{r}
+TP <- 
+  combo_matrix_generateR(upper_left_tarsus = "W", 
+                         lower_left_tarsus = c("W", "B", "R"))
+TP
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Tiwai_Point" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Tiwai_Point")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Tiwai_Point")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Tiwai_Point", x = TP)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+## Chatham Islands
+
+Blue over green, red, or yellow on left
+
+```{r}
+CH <- 
+  combo_matrix_generateR(upper_left_tarsus = "B", 
+                         lower_left_tarsus = c("G", "R", "Y"))
+CH
+```
+
+```{r, eval=FALSE}
+# Check if the sheet exists and remove it
+if ("Chathams" %in% names(BADO_combo_matricies)) {
+  removeWorksheet(BADO_combo_matricies, "Chathams")
+}
+
+# Add a new worksheet with the same name
+addWorksheet(BADO_combo_matricies, sheetName = "Chathams")
+
+# Write your DataFrame to the new sheet
+writeData(BADO_combo_matricies, sheet = "Chathams", x = CH)
+
+# Save the updated workbook
+saveWorkbook(BADO_combo_matricies, 
+             file = here("data/BADO_combo_matricies.xlsx"), 
+             overwrite = TRUE)
+```
+
+# Pre-2024 banding data wrangle
+
+To make all the pre-2024 data accessible on the scidb server, we need to standardize the structure and bind the various sources together (e.g., the Google Sheets database and Tony and Ted's excel sheets)
+
+```{r}
+google_drive_db <-
+  read_sheet("https://docs.google.com/spreadsheets/d/1Tp26Z23HSXXZSoGXD4dbP3xukhrY1kWhzQrbtRHt4EY/edit?usp=sharing",
+             sheet = "Captures", col_types = "c") %>%
+
+  # subset to Banded Dotterels
+  filter(species == "BADO") %>%
+
+  # pad the date column so that there is a zero added in front of cases with
+  # only 3 characters (e.g., 1st Oct is 110, but should be 0110)
+  mutate(date = str_pad(date, side = "left", width = 4, pad = "0")) %>%
+
+  # format the date column (if there are data entered)
+  mutate(date = ifelse(!is.na(date),
+                       paste(year, substring(date, first = 3, last = 4),
+                                   substring(date, first = 1, last = 2),
+                             sep = "-"), NA) %>% as.Date()) %>%
+
+  # pad the time column so that there is a zero added in front of cases with
+  # only 3 characters (e.g., 110 is 1:10AM, but should be 0110)
+  mutate(time = str_pad(time, width = 4, side = "left", pad = "0")) %>%
+  mutate(time = ifelse(!is.na(time),
+                       paste0(substr(time, 1, 2), ":",
+                              substr(time, 3, 4), ":00"), NA) %>% as_hms) %>% 
+  
+  # bind time and date together and set local timezone
+  mutate(local_capture_time = 
+           ifelse(!is.na(time), ymd_hms(paste(date, time, sep = " "), 
+                                        tz = 'Pacific/Auckland'),
+                  NA) %>% as.POSIXct(tz = 'Pacific/Auckland')) %>% 
+  
+  # make age column consistent such that juveniles and classed as "P" (i.e., pulli)
+  mutate(age = case_when(
+      age == "A" ~ "A",
+      age == "J" ~ "P",
+      age == "P" ~ "P",
+      is.na(age) ~ "U"
+    )) %>% 
+  mutate(sex = case_when(
+      sex == "J" ~ "U",
+      sex == "F" ~ "F",
+      sex == "M" ~ "M",
+      sex == "F?" ~ "FU",
+      sex == "M?" ~ "MU",
+      sex == "U" ~ "U",
+      is.na(sex) ~ "U"
+    )) %>% 
+  # Extract components using regex
+  mutate(
+    UL = str_extract(code, "^[^.]+"),        # Before first "."
+    LL = str_extract(code, "(?<=\\.)[^|]+"), # Between "." and "|"
+    UR = str_extract(code, "(?<=\\|)[^.]+"), # Between "|" and "."
+    LR = str_extract(code, "(?<=\\.)[^.]+$"))%>% 
+  mutate(
+    # Remove only one "X" when it appears once or twice
+    UL = str_replace(UL, "X", ""),
+    LL = str_replace(LL, "X", ""),
+    UR = str_replace(UR, "X", ""),
+    LR = str_replace(LR, "X", "")
+  ) %>% 
+  # assign the tag type based on the first 2 characters of the tag ID
+  mutate(tag_type = ifelse(str_sub(tag, 1, 2) %in% c("66", "23"), "PTT", 
+                           ifelse(str_sub(tag, 1, 2) %in% c("55", "21", "20", "dr", "06", "04", "03"), "GPS", NA))) %>% 
+  # extract the tag ID
+  mutate(tag_id = ifelse(tag_type %in% c("PTT", "GPS"), tag, NA))  %>% 
+
+  # specify the project name for a given capture
+  mutate(Project_Name = ifelse(site == "TP", "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project",
+                               ifelse(is.na(bill) & observer == "KG", "Mackenzie drylands bird movements MSc study", 
+                                "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project"))) %>%
+  
+  # make wing and tarsus columns numeric
+  mutate(left_wing = as.numeric(left_wing),
+         right_wing = as.numeric(right_wing),
+         left_tarsus = as.numeric(left_tarsus),
+         right_tarsus = as.numeric(right_tarsus)) %>% 
+  
+  # create the columns needed for the scidb structure
+  mutate(date = as.Date(local_capture_time),
+         cap_start = NA,
+         caught = NA,
+         released = time,
+         capture_method = "TN",
+         nest_id = ID,
+         book_id = NA,
+         form_id = NA,
+         observer = observer,
+         gps_id = NA,
+         gps_point = NA,
+         field_sex = field_sex,
+         age = age,
+         ring = ring,
+         UL = UL,
+         LL = LL,
+         UR = UR,
+         LR = LR,
+         tag_id = tag_id,
+         tag_action = NA,
+         tag_type = tag_type,
+         tag_extras = NA,
+         harness_size = NA,
+         culmen = as.numeric(bill),
+         tarsus = rowMeans(cbind(left_tarsus, right_tarsus), na.rm = TRUE),
+         total_head = NA,
+         head_white = NA,
+         head_black = NA,
+         rufous_band = NA,
+         wing = rowMeans(cbind(left_wing, right_wing), na.rm = TRUE),
+         weight = as.numeric(weight),
+         wt_w_tag = NA,
+         moult = moult,
+         fat = fat,
+         sample = NA,
+         cam_id = NA,
+         photo_start = NA,
+         photo_end = NA,
+         harddrive_id = NA,
+         capture_status = NA,
+         parents = NA,
+         comments = comments,
+         falcon_upload = NA,
+         nov = NA,
+         pk = NA) %>%
+  
+  # select and format the table for the scdb format
+  dplyr::select(species, site, date, cap_start, caught, released, capture_method,
+                nest_id, book_id, form_id, observer, gps_id, gps_point, field_sex, age, ring,
+                UL, LL, UR, LR, tag_id, tag_action, tag_type, tag_extras, harness_size, culmen,
+                tarsus, total_head, head_white, head_black, rufous_band, wing, weight, wt_w_tag,
+                moult, fat, sample, cam_id, photo_start, photo_end, harddrive_id, capture_status,
+                parents, comments, falcon_upload, nov, pk)
+
+# do the same for Tony's data
+tony_db <- 
+  tony_caps %>% 
+  mutate(site = ifelse(site == "Miranda rescue", "MA", "PW"),
+         date = as.Date(local_capture_time),
+         cap_start = NA,
+         caught = NA,
+         released = NA,
+         capture_method = "TN",
+         nest_id = NA,
+         book_id = NA,
+         form_id = NA,
+         observer = "TH",
+         gps_id = NA,
+         gps_point = NA,
+         field_sex = sex,
+         age = age,
+         ring = ring,
+         UL = ifelse(UL == "*", "M", UL),
+         LL = LL,
+         UR = UR,
+         LR = LR,
+         tag_id = NA,
+         tag_action = NA,
+         tag_type = NA,
+         tag_extras = NA,
+         harness_size = NA,
+         culmen = NA,
+         tarsus = NA,
+         total_head = NA,
+         head_white = NA,
+         head_black = NA,
+         rufous_band = NA,
+         wing = NA,
+         weight = NA,
+         wt_w_tag = NA,
+         moult = NA,
+         fat = NA,
+         sample = NA,
+         cam_id = NA,
+         photo_start = NA,
+         photo_end = NA,
+         harddrive_id = NA,
+         capture_status = NA,
+         parents = NA,
+         comments = NA,
+         falcon_upload = NA,
+         nov = NA,
+         pk = NA) %>%
+  dplyr::select(species, site, date, cap_start, caught, released, capture_method,
+                nest_id, book_id, form_id, observer, gps_id, gps_point, field_sex, age, ring,
+                UL, LL, UR, LR, tag_id, tag_action, tag_type, tag_extras, harness_size, culmen,
+                tarsus, total_head, head_white, head_black, rufous_band, wing,
+                weight, wt_w_tag, moult, fat, sample, cam_id, photo_start, photo_end, harddrive_id, capture_status,
+                parents, comments, falcon_upload, nov, pk)
+
+# do the same for Ted's data
+ted_db <- 
+  ted_caps %>% 
+  mutate(species = "BADO",
+         site = "KK",
+         date = as.Date(local_capture_time),
+         cap_start = NA,
+         caught = NA,
+         released = NA,
+         capture_method = "TN",
+         nest_id = NA,
+         book_id = NA,
+         form_id = NA,
+         observer = "TH",
+         gps_id = NA,
+         gps_point = NA,
+         field_sex = sex,
+         age = age,
+         ring = ring,
+         UL = ifelse(UL == "*", "M", UL),
+         LL = LL,
+         UR = UR,
+         LR = LR,
+         tag_id = NA,
+         tag_action = NA,
+         tag_type = NA,
+         tag_extras = NA,
+         harness_size = NA,
+         culmen = NA,
+         tarsus = NA,
+         total_head = NA,
+         head_white = NA,
+         head_black = NA,
+         rufous_band = NA,
+         wing = NA,
+         weight = NA,
+         wt_w_tag = NA,
+         moult = NA,
+         fat = NA,
+         sample = NA,
+         cam_id = NA,
+         photo_start = NA,
+         photo_end = NA,
+         harddrive_id = NA,
+         capture_status = NA,
+         parents = NA,
+         comments = NA,
+         falcon_upload = NA,
+         nov = NA,
+         pk = NA) %>%
+  dplyr::select(species, site, date, cap_start, caught, released, capture_method,
+                nest_id, book_id, form_id, observer, gps_id, gps_point, field_sex, age, ring,
+                UL, LL, UR, LR, tag_id, tag_action, tag_type, tag_extras, harness_size, culmen,
+                tarsus, total_head, head_white, head_black, rufous_band, wing,
+                weight, wt_w_tag, moult, fat, sample, cam_id, photo_start, photo_end, harddrive_id, capture_status,
+                parents, comments, falcon_upload, nov, pk)
+
+# bind all three sources together and clean up
+pre_2024_captures <- 
+  bind_rows(tony_db, ted_db, google_drive_db) %>%
+  group_by(ring) %>%
+  arrange(date, .by_group = TRUE) %>% 
+  # assign the capture statuses based on the temporal sequence of captures and combo assignment
+  mutate(
+    capture_status = case_when(
+      is.na(capture_status) & row_number() == 1 ~ "F",
+      is.na(capture_status) & row_number() > 1 & (LL != lag(LL) | LR != lag(LR)) ~ "C",
+      is.na(capture_status) & row_number() > 1 & (LL == lag(LL) & LR == lag(LR)) ~ "R",
+      TRUE ~ capture_status # Preserve existing values if none of the conditions are met
+    )
+  ) %>%
+  ungroup() %>% 
+  arrange(date) %>% 
+  mutate(age = ifelse(age == "A", "A",
+                      ifelse(age == "P", "J", 
+                             ifelse(age == "U", "U", "XXX")))) %>% 
+  filter(!is.na(ring) & !is.na(UL) & !is.na(LL) & !is.na(UR) & !is.na(LR)) %>% 
+  mutate(across(where(is.numeric), ~ na_if(., NaN)))
+```
+
+### write the pre_2024_captures to disk
+
+```{r, eval=FALSE}
+saveRDS(pre_2024_captures, here("data/CAPTURES_pre2024.rds"))
 ```
