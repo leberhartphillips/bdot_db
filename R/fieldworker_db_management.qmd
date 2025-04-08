@@ -1426,7 +1426,7 @@ lines_bdot_AGRF_TS <-
   st_cast("LINESTRING")
 
 mapview(points_bdot_AGRF_TS, zcol = "tagID") + 
-  mapview(lines_bdot_AGRF_TS, zcol = "tagID", lwd = 2)
+  mapview(lines_bdot_AGRF_TS, zcol = "tagID", lwd = 1)
 
 ### Kaitorete Spit ----
 con = dbcon()
@@ -3778,280 +3778,393 @@ saveWorkbook(BADO_combo_matricies,
              overwrite = TRUE)
 ```
 
-# Pre-2024 banding data wrangle
+# Wrangle leg markings into the "btocodes" format for BirdMark
 
-To make all the pre-2024 data accessible on the scidb server, we need to standardize the structure and bind the various sources together (e.g., the Google Sheets database and Tony and Ted's excel sheets)
+#### import the latest excel sheet detailing all the combos available
 
 ```{r}
-google_drive_db <-
-  read_sheet("https://docs.google.com/spreadsheets/d/1Tp26Z23HSXXZSoGXD4dbP3xukhrY1kWhzQrbtRHt4EY/edit?usp=sharing",
-             sheet = "Captures", col_types = "c") %>%
+BADO_banding <- 
+  read_xlsx(path = here("data/marked_bdots_Mar_2025_.xlsx"),
+            col_types = "text", 
+            sheet = 1)  %>% 
+  mutate(Date = as.POSIXct(as.Date(as.numeric(Date), origin = "1899-12-30"), tz = "Pacific/Auckland"))
+```
 
-  # subset to Banded Dotterels
-  filter(species == "BADO") %>%
-
-  # pad the date column so that there is a zero added in front of cases with
-  # only 3 characters (e.g., 1st Oct is 110, but should be 0110)
-  mutate(date = str_pad(date, side = "left", width = 4, pad = "0")) %>%
-
-  # format the date column (if there are data entered)
-  mutate(date = ifelse(!is.na(date),
-                       paste(year, substring(date, first = 3, last = 4),
-                                   substring(date, first = 1, last = 2),
-                             sep = "-"), NA) %>% as.Date()) %>%
-
-  # pad the time column so that there is a zero added in front of cases with
-  # only 3 characters (e.g., 110 is 1:10AM, but should be 0110)
-  mutate(time = str_pad(time, width = 4, side = "left", pad = "0")) %>%
-  mutate(time = ifelse(!is.na(time),
-                       paste0(substr(time, 1, 2), ":",
-                              substr(time, 3, 4), ":00"), NA) %>% as_hms) %>% 
-  
-  # bind time and date together and set local timezone
-  mutate(local_capture_time = 
-           ifelse(!is.na(time), ymd_hms(paste(date, time, sep = " "), 
-                                        tz = 'Pacific/Auckland'),
-                  NA) %>% as.POSIXct(tz = 'Pacific/Auckland')) %>% 
-  
-  # make age column consistent such that juveniles and classed as "P" (i.e., pulli)
-  mutate(age = case_when(
-      age == "A" ~ "A",
-      age == "J" ~ "P",
-      age == "P" ~ "P",
-      is.na(age) ~ "U"
-    )) %>% 
-  mutate(sex = case_when(
-      sex == "J" ~ "U",
-      sex == "F" ~ "F",
-      sex == "M" ~ "M",
-      sex == "F?" ~ "FU",
-      sex == "M?" ~ "MU",
-      sex == "U" ~ "U",
-      is.na(sex) ~ "U"
-    )) %>% 
-  # Extract components using regex
+```{r}
+btocodes <-
+  BADO_banding %>% 
+  select("Prefix", "Number", "Locality_general", "Sex", "Age", "Left_tibia",  "Left_tarsus", "Right_tibia", "Right_tarsus") %>%
+  mutate(LA = Left_tibia,
+        LB = Left_tarsus,
+        RA = Right_tibia, 
+        RB = Right_tarsus) %>%
+  mutate(across(
+    c(Left_tibia, Left_tarsus, Right_tibia, Right_tarsus),
+    ~ str_replace_all(., c(
+        "LG" = "L",
+        "\\*" = "M",
+        "FW" = "WF",
+        "FO" = "OF",
+        "/" = ",",
+        ",X" = "",  # Remove "/X"
+        "X," = ""   # Remove "X/"
+      ))
+  )) %>%
   mutate(
-    UL = str_extract(code, "^[^.]+"),        # Before first "."
-    LL = str_extract(code, "(?<=\\.)[^|]+"), # Between "." and "|"
-    UR = str_extract(code, "(?<=\\|)[^.]+"), # Between "|" and "."
-    LR = str_extract(code, "(?<=\\.)[^.]+$"))%>% 
-  mutate(
-    # Remove only one "X" when it appears once or twice
-    UL = str_replace(UL, "X", ""),
-    LL = str_replace(LL, "X", ""),
-    UR = str_replace(UR, "X", ""),
-    LR = str_replace(LR, "X", "")
-  ) %>% 
-  # assign the tag type based on the first 2 characters of the tag ID
-  mutate(tag_type = ifelse(str_sub(tag, 1, 2) %in% c("66", "23"), "PTT", 
-                           ifelse(str_sub(tag, 1, 2) %in% c("55", "21", "20", "dr", "06", "04", "03"), "GPS", NA))) %>% 
-  # extract the tag ID
-  mutate(tag_id = ifelse(tag_type %in% c("PTT", "GPS"), tag, NA))  %>% 
-
-  # specify the project name for a given capture
-  mutate(Project_Name = ifelse(site == "TP", "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project",
-                               ifelse(is.na(bill) & observer == "KG", "Mackenzie drylands bird movements MSc study", 
-                                "DOC Mobile Threatened Species Research Programme: Banded dotterel flyways project"))) %>%
-  
-  # make wing and tarsus columns numeric
-  mutate(left_wing = as.numeric(left_wing),
-         right_wing = as.numeric(right_wing),
-         left_tarsus = as.numeric(left_tarsus),
-         right_tarsus = as.numeric(right_tarsus)) %>% 
-  
-  # create the columns needed for the scidb structure
-  mutate(date = as.Date(local_capture_time),
-         cap_start = NA,
-         caught = NA,
-         released = time,
-         capture_method = "TN",
-         nest_id = ID,
-         book_id = NA,
-         form_id = NA,
-         observer = observer,
-         gps_id = NA,
-         gps_point = NA,
-         field_sex = field_sex,
-         age = age,
-         ring = ring,
-         UL = UL,
-         LL = LL,
-         UR = UR,
-         LR = LR,
-         tag_id = tag_id,
-         tag_action = NA,
-         tag_type = tag_type,
-         tag_extras = NA,
-         harness_size = NA,
-         culmen = as.numeric(bill),
-         tarsus = rowMeans(cbind(left_tarsus, right_tarsus), na.rm = TRUE),
-         total_head = NA,
-         head_white = NA,
-         head_black = NA,
-         rufous_band = NA,
-         wing = rowMeans(cbind(left_wing, right_wing), na.rm = TRUE),
-         weight = as.numeric(weight),
-         wt_w_tag = NA,
-         moult = moult,
-         fat = fat,
-         sample = NA,
-         cam_id = NA,
-         photo_start = NA,
-         photo_end = NA,
-         harddrive_id = NA,
-         capture_status = NA,
-         parents = NA,
-         comments = comments,
-         falcon_upload = NA,
-         nov = NA,
-         pk = NA) %>%
-  
-  # select and format the table for the scdb format
-  dplyr::select(species, site, date, cap_start, caught, released, capture_method,
-                nest_id, book_id, form_id, observer, gps_id, gps_point, field_sex, age, ring,
-                UL, LL, UR, LR, tag_id, tag_action, tag_type, tag_extras, harness_size, culmen,
-                tarsus, total_head, head_white, head_black, rufous_band, wing, weight, wt_w_tag,
-                moult, fat, sample, cam_id, photo_start, photo_end, harddrive_id, capture_status,
-                parents, comments, falcon_upload, nov, pk)
-
-# do the same for Tony's data
-tony_db <- 
-  tony_caps %>% 
-  mutate(site = ifelse(site == "Miranda rescue", "MA", "PW"),
-         date = as.Date(local_capture_time),
-         cap_start = NA,
-         caught = NA,
-         released = NA,
-         capture_method = "TN",
-         nest_id = NA,
-         book_id = NA,
-         form_id = NA,
-         observer = "TH",
-         gps_id = NA,
-         gps_point = NA,
-         field_sex = sex,
-         age = age,
-         ring = ring,
-         UL = ifelse(UL == "*", "M", UL),
-         LL = LL,
-         UR = UR,
-         LR = LR,
-         tag_id = NA,
-         tag_action = NA,
-         tag_type = NA,
-         tag_extras = NA,
-         harness_size = NA,
-         culmen = NA,
-         tarsus = NA,
-         total_head = NA,
-         head_white = NA,
-         head_black = NA,
-         rufous_band = NA,
-         wing = NA,
-         weight = NA,
-         wt_w_tag = NA,
-         moult = NA,
-         fat = NA,
-         sample = NA,
-         cam_id = NA,
-         photo_start = NA,
-         photo_end = NA,
-         harddrive_id = NA,
-         capture_status = NA,
-         parents = NA,
-         comments = NA,
-         falcon_upload = NA,
-         nov = NA,
-         pk = NA) %>%
-  dplyr::select(species, site, date, cap_start, caught, released, capture_method,
-                nest_id, book_id, form_id, observer, gps_id, gps_point, field_sex, age, ring,
-                UL, LL, UR, LR, tag_id, tag_action, tag_type, tag_extras, harness_size, culmen,
-                tarsus, total_head, head_white, head_black, rufous_band, wing,
-                weight, wt_w_tag, moult, fat, sample, cam_id, photo_start, photo_end, harddrive_id, capture_status,
-                parents, comments, falcon_upload, nov, pk)
-
-# do the same for Ted's data
-ted_db <- 
-  ted_caps %>% 
-  mutate(species = "BADO",
-         site = "KK",
-         date = as.Date(local_capture_time),
-         cap_start = NA,
-         caught = NA,
-         released = NA,
-         capture_method = "TN",
-         nest_id = NA,
-         book_id = NA,
-         form_id = NA,
-         observer = "TH",
-         gps_id = NA,
-         gps_point = NA,
-         field_sex = sex,
-         age = age,
-         ring = ring,
-         UL = ifelse(UL == "*", "M", UL),
-         LL = LL,
-         UR = UR,
-         LR = LR,
-         tag_id = NA,
-         tag_action = NA,
-         tag_type = NA,
-         tag_extras = NA,
-         harness_size = NA,
-         culmen = NA,
-         tarsus = NA,
-         total_head = NA,
-         head_white = NA,
-         head_black = NA,
-         rufous_band = NA,
-         wing = NA,
-         weight = NA,
-         wt_w_tag = NA,
-         moult = NA,
-         fat = NA,
-         sample = NA,
-         cam_id = NA,
-         photo_start = NA,
-         photo_end = NA,
-         harddrive_id = NA,
-         capture_status = NA,
-         parents = NA,
-         comments = NA,
-         falcon_upload = NA,
-         nov = NA,
-         pk = NA) %>%
-  dplyr::select(species, site, date, cap_start, caught, released, capture_method,
-                nest_id, book_id, form_id, observer, gps_id, gps_point, field_sex, age, ring,
-                UL, LL, UR, LR, tag_id, tag_action, tag_type, tag_extras, harness_size, culmen,
-                tarsus, total_head, head_white, head_black, rufous_band, wing,
-                weight, wt_w_tag, moult, fat, sample, cam_id, photo_start, photo_end, harddrive_id, capture_status,
-                parents, comments, falcon_upload, nov, pk)
-
-# bind all three sources together and clean up
-pre_2024_captures <- 
-  bind_rows(tony_db, ted_db, google_drive_db) %>%
-  group_by(ring) %>%
-  arrange(date, .by_group = TRUE) %>% 
-  # assign the capture statuses based on the temporal sequence of captures and combo assignment
-  mutate(
-    capture_status = case_when(
-      is.na(capture_status) & row_number() == 1 ~ "F",
-      is.na(capture_status) & row_number() > 1 & (LL != lag(LL) | LR != lag(LR)) ~ "C",
-      is.na(capture_status) & row_number() > 1 & (LL == lag(LL) & LR == lag(LR)) ~ "R",
-      TRUE ~ capture_status # Preserve existing values if none of the conditions are met
-    )
+    Left_tibia = ifelse(!is.na(Left_tibia), paste0("LA", Left_tibia), NA),
+    Left_tarsus = ifelse(!is.na(Left_tarsus), paste0("LB", Left_tarsus), NA),
+    Right_tibia = ifelse(!is.na(Right_tibia), paste0("RA", Right_tibia), NA),
+    Right_tarsus = ifelse(!is.na(Right_tarsus), paste0("RL", Right_tarsus), NA)
   ) %>%
-  ungroup() %>% 
-  arrange(date) %>% 
-  mutate(age = ifelse(age == "A", "A",
-                      ifelse(age == "P", "J", 
-                             ifelse(age == "U", "U", "XXX")))) %>% 
-  filter(!is.na(ring) & !is.na(UL) & !is.na(LL) & !is.na(UR) & !is.na(LR)) %>% 
-  mutate(across(where(is.numeric), ~ na_if(., NaN)))
+  rowwise() %>%
+  mutate(btocodes = paste(na.omit(c(Left_tibia, Left_tarsus, Right_tibia, Right_tarsus)), collapse = ";")) %>% 
+  mutate(nchar_ = nchar(btocodes)) %>% 
+  filter(nchar_ > 7) %>% 
+  select(Prefix, Number, Sex, Age, btocodes) %>% 
+  mutate(Age = ifelse(Age == "P", "J", Age)) %>% 
+  rbind(data.frame(Prefix = "none", 
+                   Number = "none", 
+                   Sex = "F", 
+                   Age = "A", 
+                   btocodes = "RAWF(2K)"))
+btocodes
+
+write.xlsx(btocodes, 
+           file = here("data/btocodes_07Apr25.xlsx"), 
+           sheetName = "Sheet1", 
+           rowNames = FALSE)
 ```
 
-### write the pre_2024_captures to disk
+# Exploring Argos data
+### import and check Argos data
+```{r}
+# import sensor data for tags collected prior to Jan 9, 2025
+argos_sensor_data_pre_jan_9_2025 <- 
+  bind_rows(read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_57_56.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_58_31.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_59_05.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_19_59_42.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_00_15.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_00_47.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_01_20.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_01_43.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_02_10.csv", stringsAsFactors = FALSE),
+            read.csv("/Users/leberhart/ownCloud/kemp_projects/bdot/R_projects/bdot_db/data/argos/ArgosData_2025_03_17_20_02_34.csv", stringsAsFactors = FALSE)) %>% 
+  rename(tagID = Platform.ID.No.,
+         locationDate = Loc..date,
+         bestMsgDate = Msg.Date,
+         `SENSOR #1` = SENSOR.01,
+         `SENSOR #2` = SENSOR.02, 
+         `SENSOR #3` = SENSOR.03, 
+         `SENSOR #4` = SENSOR.04, 
+         `SENSOR #5` = SENSOR.05, 
+         `SENSOR #6` = SENSOR.06, 
+         `SENSOR #7` = SENSOR.07, 
+         `SENSOR #8` = SENSOR.08) %>% 
+  dplyr::select(tagID,  locationDate, `SENSOR #1`, `SENSOR #2`, `SENSOR #3`, `SENSOR #4`, `SENSOR #5`, `SENSOR #6`, `SENSOR #7`, `SENSOR #8`) %>% 
+  mutate(locationDate = as.POSIXct(locationDate, tz = "UTC"),
+         tagID = as.character(tagID)) %>% 
+  mutate(locationDate = with_tz(locationDate, tzone = 'Pacific/Auckland'))
 
-```{r, eval=FALSE}
-saveRDS(pre_2024_captures, here("data/CAPTURES_pre2024.rds"))
+argos_sensor_data_pre_jan_9_2025 %>% 
+  filter(tagID == "266447")
+
+# connect to database
+con = dbcon()
+dbExecute(con, "USE FIELD_2024_BADOatNZ")
+
+argos_2024 <-
+  
+  # Load ARGOS data from the 2024_BADO table of the ARGOS2 database
+  dbq(q = "SELECT * FROM ARGOS2.2024_BADO") %>%
+  
+  # Convert locationDate timezone to 'Pacific/Auckland'
+  mutate(locationDate = with_tz(locationDate, tzone = 'Pacific/Auckland')) %>%
+  
+  # Remove duplicate rows
+  distinct() %>%
+  
+  # Ensure tagID is a character
+  mutate(tagID = as.character(tagID)) %>%
+  
+  # Join with ARGOS sensor data
+  full_join(
+    dbq(con, "SELECT * FROM ARGOS2.sensors") %>%
+      filter(platformId %in% (
+        dbq(con, "SELECT * FROM CAPTURES") %>%
+          pull(tag_id) %>%
+          unique()
+      )) %>%
+      
+      # Reshape from long to wide format
+      pivot_wider(
+        names_from = sensor_info, 
+        values_from = sensor_value
+      ) %>%
+      
+      # Rename and adjust formats
+      rename(locationDate = timestamp,
+             tagID = platformId) %>%
+      mutate(locationDate = with_tz(locationDate, tzone = 'Pacific/Auckland'),
+             tagID = as.character(tagID)) %>%
+      
+      # Drop unnecessary columns
+      select(-c(sensor_id, pk)) %>%
+      
+      # Aggregate by tagID and timestamp, taking max value of each SENSOR
+      group_by(tagID, locationDate) %>%
+      summarise(across(starts_with("SENSOR"), ~ max(.x, na.rm = TRUE)), .groups = "drop") %>% 
+      bind_rows(argos_sensor_data_pre_jan_9_2025), 
+    
+    by = c("tagID", "locationDate")
+  ) %>% 
+  
+  # Calculate derived sensor metrics: temperature, voltage, and acceleration
+  mutate(
+    temp = ifelse(is.infinite(`SENSOR #1`), NA, (0.474 * `SENSOR #1`) - 35.662),
+    volt = ifelse(is.infinite(`SENSOR #2`), NA, (0.0079 * `SENSOR #2`) + 2.4129),
+    acc  = `SENSOR #4`
+  ) %>%
+  
+  # Rename tagID "266470" based on date (re-deployment split into A and B)
+  mutate(tagID = ifelse(
+    tagID == "266470" & locationDate < as.POSIXct("2024-12-09 17:38:00", tz = 'Pacific/Auckland'), 
+    "266470_A", 
+    ifelse(
+      tagID == "266470" & locationDate >= as.POSIXct("2024-12-09 17:38:00", tz = 'Pacific/Auckland'), 
+      "266470_B", 
+      tagID
+    )
+  )) %>%
+  
+  # Join with CAPTURES table to get deployment times
+  left_join(
+    dbq(con, "SELECT * FROM CAPTURES") %>%
+      filter(nchar(tag_id) == 6) %>%                        # Keep only 6-digit tags
+      rename(tagID = tag_id) %>%
+      group_by(tagID) %>%
+      
+      # Get latest known time from cap_start, caught, or released
+      mutate(time = as_hms(max(cap_start, caught, released, na.rm = TRUE))) %>%
+      
+      # Create full timestamp of deployment
+      mutate(time_deployed = as.POSIXct(paste(date, time), format = "%Y-%m-%d %H:%M", tz = 'Pacific/Auckland')) %>%
+      
+      # Again, rename 266470 to A or B based on ring ID
+      mutate(tagID = ifelse(tagID == "266470" & ring == "CP19334", "266470_A", 
+                            ifelse(tagID == "266470" & ring == "CP16667", "266470_B", tagID)))  %>% 
+
+      # clean up the leg marking columns to a) remove erroneous white space
+      mutate(across(c(UL, LL, UR, LR), ~ gsub("[,[:space:]]", "", .))) %>%
+        
+      # put an X in all leg-mark cases that are blank
+      mutate(across(c(UL, LL, UR, LR), ~ ifelse(is.na(.) | . == "", "X", .))) %>%
+        
+      # put an "FW" in front of all text that is not X, M, FO, or starting with FW in the UL and UR positions 
+      mutate(across(c(UL, UR), ~ ifelse(. %in% c("X", "M", "FO", "G", "R", "O", "W", "L", "Y") | grepl("^FW", .) | is.na(.), ., paste0("FW", .)))) %>%
+        
+      # put a note in the ring field for the two birds that didn't get a metal band
+      mutate(ring = ifelse(str_detect(UR, "FW2K") & pk == 23, "missing_metal_FW2K", ring)) %>% 
+        
+      mutate(UR = ifelse(UR == "FWFO", "FO", UR)) %>% 
+      
+      mutate(mark = ifelse(LL == "X" & LR == "X" & UL == "M", UR, 
+                           ifelse(LL == "X" & LR == "X" & UR == "M", UL, 
+                                  ifelse(LL == "X" & LR == "X" & UR != "M", UR, paste(LL, "-", LR))))) %>% 
+      
+      # Keep only relevant columns
+      select(tagID, ring, site, field_sex, mark, time_deployed), 
+    by = "tagID"
+  ) %>% 
+  
+  # Keep only rows with a valid location date
+  filter(!is.na(locationDate)) %>%
+  
+  distinct() %>% 
+  
+  # Only include ARGOS locations after the tag was deployed
+  filter(locationDate >= time_deployed) %>%
+  
+  # Drop time_deployed after filtering
+  select(-time_deployed) %>%
+  
+  # Keep only relevant columns for final output
+  select(
+    tagID, ring, site, field_sex, mark, locationDate, latitude, longitude, locationClass, 
+    errorRadius, semiMajor, semiMinor, orientation, temp, volt, acc
+  ) %>%
+  
+  # Arrange chronologically by tag
+  arrange(tagID, locationDate) %>% 
+  
+  # remove rows of data that were collected after the death of CP19334 but before the redeployment of the tag on CP16667
+  mutate(remove = ifelse(tagID == "266470_A" & locationDate > as.POSIXct("2024-10-12 19:15:00", tz = 'Pacific/Auckland'), "1", 
+                         ifelse(tagID == "266470_B" & locationDate < as.POSIXct("2024-12-09 17:38:00", tz = 'Pacific/Auckland'), "1", "0"))) %>% 
+  filter(remove == 0) %>% 
+  select(-remove) %>% 
+  rename(local_date_time = locationDate) %>% 
+  mutate(local_date = as.Date(local_date_time))
 ```
+
+### summarise Argos data: daily fix rate, daily temperature, daily activity
+```{r}
+argos_2024_daily_fix_rate <- 
+  argos_2024 %>% 
+  group_by(tagID, site, ring, field_sex, mark, local_date) %>% 
+  mutate(lag_acc = lag(acc) - acc) %>%
+  summarise(n_fixes = sum(!is.na(latitude)),
+            mean_temp = mean(temp, na.rm = TRUE),
+            mean_lag_acc = mean(lag_acc, na.rm = TRUE),
+            n_acc_values = n_distinct(as.character(acc)),
+            mean_voltage = mean(volt, na.rm = TRUE),
+            max_acc = max(acc, na.rm = TRUE))
+```
+
+### plot some tracks
+E.g., all tracks since deployment from the Tasman Valley (site == "TS")
+```{r}
+argos_2024_points <-
+  argos_2024 %>% 
+  filter(site == "TS") %>%
+  filter(!is.na(longitude)) %>% 
+  filter(latitude < 0 & latitude > -48) %>% 
+  filter(locationClass %in% c(1, 2, 3)) %>% 
+  dplyr::select(ring, tagID, mark, field_sex, latitude, longitude, local_date) %>% 
+  distinct() %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326) 
+
+argos_2024_lines <- 
+  argos_2024_points  %>% 
+  group_by(ring) %>%
+  arrange(local_date) %>% 
+  summarise(do_union = FALSE) %>%
+  st_cast("LINESTRING")
+
+mapview(argos_2024_points, zcol = "ring") + 
+  mapview(argos_2024_lines, zcol = "ring", lwd = 2)
+```
+
+### temporal variation in daily fix rate
+```{r}
+ggplot(data = argos_2024_daily_fix_rate) +
+  geom_point(aes(x = local_date, y = n_fixes, color = site), alpha = 0.5) +
+  geom_smooth(aes(x = local_date, y = n_fixes), color = "white") +
+  theme_minimal() +
+  facet_wrap(site + tagID + mark ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("daily number of PTT transmissons")
+```
+
+### temporal variation in daily mean tag temperature
+```{r}
+ggplot(data = argos_2024_daily_fix_rate) +
+  geom_point(aes(x = local_date, y = mean_temp, color = site), alpha = 0.5) +
+  geom_smooth(aes(x = local_date, y = mean_temp), color = "white") +
+  theme_minimal() +
+  facet_wrap(site + tagID + mark ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("daily mean tag temperature (°C)")
+```
+
+### temporal variation in daily maximum tag activity sensor value
+```{r}
+ggplot(data = argos_2024_daily_fix_rate %>% 
+         filter(max_acc > -1)) +
+  geom_point(aes(x = local_date, y = max_acc, color = site), alpha = 0.5) +
+  geom_smooth(aes(x = local_date, y = max_acc), color = "white") +
+  theme_minimal() +
+  facet_wrap(site + tagID + mark ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  scale_y_continuous(limits = c(-5, 65)) +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("daily maximum activity sensor reading (6 Bit counter ranging from 0 to 63)")
+```
+
+### temporal variation in raw tag temperature
+```{r}
+ggplot(data = argos_2024) +
+  geom_point(aes(x = local_date, y = temp, color = site), alpha = 0.5) +
+  geom_smooth(aes(x = local_date, y = temp), color = "white") +
+  theme_minimal() +
+  facet_wrap(site + tagID ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("raw tag temperature (°C)")
+```
+
+### temporal variation in raw tag activity sensor value
+```{r}
+ggplot(data = argos_2024) +
+  geom_point(aes(x = local_date, y = acc, color = site), alpha = 0.5) +
+  geom_smooth(aes(x = local_date, y = acc), color = "white") +
+  theme_minimal() +
+  facet_wrap(site + tagID + mark ~ ., ncol = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none",
+        axis.title.x = element_blank()) +
+  scale_y_continuous(limits = c(-5, 65)) +
+  scale_color_brewer(palette = "Dark2") +
+  ylab("activity sensor (6 Bit counter ranging from 0 to 63)")
+```
+
+### inspect scidb sensor data vs. argos web sensor data (there are a few weird inconsistencies)
+```{r}
+argos_sensor_data_266447_Jan_scidb <- 
+  dbq(con, "SELECT * FROM ARGOS2.sensors") %>%
+  filter(platformId == "266447") %>%
+  
+  # Reshape from long to wide format
+  pivot_wider(
+      names_from = sensor_info, 
+      values_from = sensor_value
+  ) %>%
+  
+  # Rename and adjust formats
+  rename(locationDate = timestamp,
+         tagID = platformId) %>%
+  mutate(locationDate = with_tz(locationDate, tzone = 'Pacific/Auckland'),
+         tagID = as.character(tagID)) %>%
+  
+  # Drop unnecessary columns
+  select(-c(sensor_id, pk)) %>%
+  
+  # Aggregate by tagID and timestamp, taking max value of each SENSOR
+  group_by(tagID, locationDate) %>%
+  summarise(across(starts_with("SENSOR"), ~ max(.x, na.rm = TRUE)), .groups = "drop") %>% 
+  filter(!is.na(`SENSOR #1`)) %>% 
+  filter(month(locationDate) == 2) %>% 
+  arrange(locationDate)
+  
+
+# import sensor data for tags collected prior to Jan 9, 2025
+argos_sensor_data_266447_Feb <- 
+  read.csv("/Users/leberhart/Downloads/ArgosData_2025_04_07_14_49_14.csv", stringsAsFactors = FALSE) %>% 
+  rename(tagID = Platform.ID.No.,
+         locationDate = Loc..date,
+         bestMsgDate = Msg.Date,
+         `SENSOR #1` = SENSOR.01,
+         `SENSOR #2` = SENSOR.02, 
+         `SENSOR #3` = SENSOR.03, 
+         `SENSOR #4` = SENSOR.04, 
+         `SENSOR #5` = SENSOR.05, 
+         `SENSOR #6` = SENSOR.06, 
+         `SENSOR #7` = SENSOR.07, 
+         `SENSOR #8` = SENSOR.08) %>% 
+  dplyr::select(tagID,  locationDate, `SENSOR #1`, `SENSOR #2`, `SENSOR #3`, `SENSOR #4`, `SENSOR #5`, `SENSOR #6`, `SENSOR #7`, `SENSOR #8`) %>% 
+  mutate(locationDate = as.POSIXct(locationDate, tz = "UTC"),
+         tagID = as.character(tagID)) %>% 
+  mutate(locationDate = with_tz(locationDate, tzone = 'Pacific/Auckland')) %>% 
+  filter(!is.na(`SENSOR #1`)) %>% 
+  arrange(locationDate)
+```
+
